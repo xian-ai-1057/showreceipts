@@ -15,7 +15,7 @@ from src.rag_chain import query
 from src.retrieval import RetrievedChunk
 from src.vectorstore import fetch_chunks_by_ids, list_sources
 
-st.set_page_config(page_title="Tag RAG", layout="wide")
+st.set_page_config(page_title="showreceipts", layout="wide")
 
 DATA_DIR = Path("data/docs")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -187,7 +187,7 @@ def render_quality_report(report: QualityReport) -> None:
 def render_sidebar() -> None:
     store = _store()
     with st.sidebar:
-        st.title("📚 Tag RAG")
+        st.title("📚 showreceipts")
 
         if st.button("＋ 新對話", use_container_width=True, type="primary"):
             _new_conversation()
@@ -344,7 +344,7 @@ _maybe_load_recent_conversation()
 
 render_sidebar()
 
-st.title("📚 Tag RAG — Citation Demo")
+st.title("📚 showreceipts — Citation Demo")
 st.caption("本地 Ollama + ChromaDB + 段落級引用 | 多格式 | 對話歷史 | 品質評估")
 
 tab_docs, tab_chat = st.tabs(["📥 文件管理", "💬 問答"])

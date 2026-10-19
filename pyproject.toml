@@ -1,7 +1,7 @@
 [project]
-name = "tag-rag"
+name = "showreceipts"
 version = "0.1.0"
-description = "RAG with inline chunk-level citations — local Ollama + ChromaDB + Streamlit"
+description = "Framework-agnostic citation layer for RAG answers — inline [n] citations, renumbering, fabricated-marker removal, rule-based quality report"
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3",

@@ -1367,7 +1367,7 @@ def main() -> None:
 | Q10 | 外部引用重載後不加 stale 標籤需要記住來源 | `StoredCitation` 每筆加 `origin`（`local` / `external`），並存 `source` / `locator` | 在 `Message` 層記一個 retrieval mode |
 | Q11 | D28 本地路徑要問 Richart 問題，但 `data/docs/*` 被 `.gitignore` 排除，repo 內沒有可入庫的 Richart 文件 | 未決；AC #27(a) 以「Lead 事先上傳一份 Richart 文件」為前提 | 由 `data/sample_reranked.json` 產生 `data/demo/richart_sample.md` 並 commit，UAT 先入庫此檔 |
 | Q12 | 頁碼顯示 | 維持「第 {page} 頁」原值（本地 PDF 為 0-based、非 PDF 顯示「第 0 頁」），以保持 prompt byte-identical | 本地 PDF 改 1-based、非 PDF 留空 Locator（會改變 prompt） |
-| Q13 | D9「模組與專案同名」是否包含現在就把 `pyproject.toml` 的 `name = "tag-rag"`、README 標題改為 showreceipts | 本 spec 只建 `src/showreceipts/`，不改專案名 | 步驟 8 一併改名 |
+| Q13 | D9「模組與專案同名」是否包含現在就把 `pyproject.toml` 的 `name = "tag-rag"`、README 標題改為 showreceipts | **已裁決（2026-10-19）**：專案已改名 showreceipts（`pyproject.toml`、README / CLAUDE.md 標題、UI 標題）；Chroma collection 名稱與測試 fixture 文字留待重寫處理 | — |
 | Q14 | `CitedAnswer` 除 GLOSSARY 所列（答案、Citation、Quality Report）外另有 `raw_answer`、`passages`、`fabricated_markers` | 保留（`passages` 對應現行 `retrieved`；另兩欄供 demo 展示與除錯） | 刪去 `raw_answer` / `fabricated_markers`，只在 log 中記錄 |
 
 ---
