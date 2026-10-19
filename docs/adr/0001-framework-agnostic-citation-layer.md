@@ -7,3 +7,5 @@
 - **繼續做完整本地 RAG（Tier 3）**：與「接任何框架」的目標衝突，檢索層會跟 production 重複。
 - **沿用 LangChain 當抽象層**：其他框架（LlamaIndex、Haystack、自研 arrkb）就得多帶一個重依賴，且 LangChain 介面變動頻繁。
 - **直接採用現成套件**（如 citeformer、groundcite）：見 [docs/research/related-projects.md](../research/related-projects.md)，沒有一個同時涵蓋「重編號＋移除 Fabricated Marker＋中文品質檢查＋注入任意模型」。
+
+> 後續：邊界於 [ADR-0003](0003-citation-layer-also-splits-documents.md) 擴大——文件切段改屬引用層；Tier 2 程式依 [ADR-0002](0002-rewrite-instead-of-incremental-migration.md) 重寫。
