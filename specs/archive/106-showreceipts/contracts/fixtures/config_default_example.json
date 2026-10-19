@@ -1,0 +1,9 @@
+{
+  "system_prompt": null,
+  "user_prompt_template": null,
+  "passage_block_template": null,
+  "language": "繁體中文",
+  "no_answer_reply": "依現有資料無法回答",
+  "input_marker_base": 1,
+  "enable_quality_report": true
+}
