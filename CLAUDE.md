@@ -106,3 +106,17 @@ pytest tests/integration     # 整合（test_pipeline_smoke_with_ollama 需 Olla
 | [data/sample_reranked.json](data/sample_reranked.json) | arrkb 路徑範例輸入（外部 reranked 結果） |
 | [data/chroma/](data/chroma/) | Chroma persistent dir（git ignore） |
 | [data/history.sqlite](data/history.sqlite) | 對話歷史（git ignore） |
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in this repo's GitHub Issues (`xian-ai-1057/showreceipts`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
