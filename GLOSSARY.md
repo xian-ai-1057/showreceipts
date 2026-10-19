@@ -36,17 +36,29 @@ _Avoid_: LLM client, backend
 答案實際引用到的 Passage，連同它在答案中的顯示編號。編號依答案中首次出現的順序從 1 連號。
 _Avoid_: reference, source（指引用時）
 
+**Citation Marker**：
+答案文字中指向 Passage 的編號標記。模型可能寫成 `[1, 2]` 或 `[1-3]`，引用層一律正規化為逐一的 `[1][2]` 形式。
+_Avoid_: tag, footnote, 角標
+
 **Fabricated Marker**：
-答案中出現、但不對應任何送入 Passage 的引用標記；引用層會把它從答案中移除。
+不對應任何送入 Passage 的 Citation Marker；引用層會把它從答案中移除。
 _Avoid_: invalid citation, hallucinated citation
+
+**Uncited Sentence**：
+答案中帶有數字或事實內容、卻沒有任何 Citation Marker 的句子；Quality Report 會標出它。
+_Avoid_: missing citation, orphan sentence
 
 **Cited Answer**：
 引用層的輸出，包含重編號後的答案文字、Citation 清單，以及選配的 Quality Report。
 _Avoid_: RagAnswer, response
 
 **Quality Report**：
-對 Cited Answer 做的確定性、不呼叫模型的檢查結果，供人工覆核參考，不代表答案正確。
+對 Cited Answer 做的確定性、不呼叫模型的檢查結果，供人工覆核參考，不代表答案正確。它只回報、不攔截；顯示、警告或拒答由呼叫端決定。
 _Avoid_: hallucination score, accuracy
+
+**No-Answer Reply**：
+沒有任何 Passage 可用時，引用層不呼叫模型、直接回覆的固定訊息（預設「依現有資料無法回答」，可覆寫）。
+_Avoid_: empty answer, fallback message
 
 ### 邊界
 
