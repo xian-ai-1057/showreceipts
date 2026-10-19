@@ -26,6 +26,18 @@ _Avoid_: page, chunk_index, offset
 把某個檢索系統（例如 arrkb、LangChain）的結果轉成 Passage 的轉換器；引用層對外部檢索系統的所有認識都只存在於 Adapter。
 _Avoid_: connector, loader, plugin
 
+**Document**：
+使用者直接提供、尚未切開的一整份檔案，例如在對話中上傳的那份。
+_Avoid_: file, upload, 原檔
+
+**Splitter**：
+把 Document 切成 Passage 並標上 Locator 的元件。
+_Avoid_: chunker, loader, parser
+
+**Selector**：
+依問題從一批 Passage 中挑出最相關、總長不超過預算的幾段，好放進 prompt 的元件；可由呼叫端替換。
+_Avoid_: retriever, reranker, filter
+
 **Generator**：
 引用層用來產生答案文字的語言模型，由使用者提供；引用層不綁定任何特定模型或 SDK。
 _Avoid_: LLM client, backend
