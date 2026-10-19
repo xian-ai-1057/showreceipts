@@ -1,4 +1,4 @@
-"""Centralized logging configuration for the tag_rag package."""
+"""Centralized logging configuration for the showreceipts project."""
 import logging
 import os
 

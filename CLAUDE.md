@@ -1,4 +1,6 @@
-# Tag RAG — Project Guide for Claude
+# showreceipts — Project Guide for Claude
+
+> 原名 Tag RAG（2026-10-19 改名）。
 
 ## What this is
 

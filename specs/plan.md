@@ -1,4 +1,4 @@
-# Tag RAG — Project Plan (Specs 精煉版)
+# showreceipts（原 Tag RAG）— Project Plan (Specs 精煉版)
 
 > 完整計畫見 `~/.claude/plans/rag-citation-mvp-rag-citation-memoized-locket.md`。
 > 本檔是給 teammate 看的精簡版。

@@ -1,4 +1,6 @@
-# Tag RAG: Local Document Q&A with Chunk Citations
+# showreceipts: Chunk-Level Citations for RAG Answers
+
+> 原名 Tag RAG。專案定位見 [ADR-0001](docs/adr/0001-framework-agnostic-citation-layer.md)；目前的程式仍是 Tier 2 本地 RAG demo，將依新規劃重寫。
 
 A local retrieval-augmented generation demo for asking questions across documents and inspecting the source chunks cited in each answer. The focus is traceability: keeping retrieval metadata, inline citation numbers, and saved conversations connected so a reader can check the supporting text.
 
