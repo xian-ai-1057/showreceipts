@@ -16,8 +16,10 @@ from .models import (
     SentenceSupport,
     UncitedSentence,
 )
+from .pipeline import postprocess
 
 __all__ = [
+    "postprocess",
     "Passage",
     "Citation",
     "CitedAnswer",
