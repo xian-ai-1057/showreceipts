@@ -3,6 +3,7 @@
 每列是（例號, 原答, N, base, 最終答案, citations 的 Passage 編號, fabricated_markers）。
 Passage 編號 k 指給定清單中的第 k 個（1-based），與 base 無關。例號是 Spec 106 的編號，
 文字 id 的列是 #9 與開跑前裁決新增的行為（範圍符號、豁免區、刪除處的空白）。
+重複 ID 的例 19、23 另成一表；例 20 經由 answer，待 answer 進來後補。
 """
 
 import time
@@ -72,6 +73,11 @@ GRAMMAR = [
     ("reverse-kept-item", "甲 [3-1, 2]。", 5, 1, "甲 [1]。", [2], ["[3-1, 2]"]),
     ("huge-range-no-passage", "甲 [100000000-999999999]。", 3, 1, "甲。", [], ["[100000000-999999999]"]),
     ("other-dashes", "甲 [1〜2] [1—2] [1－2]。", 3, 1, "甲 [1〜2] [1—2] [1－2]。", [], []),
+    ("tabs-inside-group", "甲 [1\t,\t2] 乙 [\t3\t]。", 3, 1, "甲 [1][2] 乙 [3]。", [1, 2, 3], []),
+    ("tabs-around-range-sign", "甲 [1\t~\t3]。", 3, 1, "甲 [1][2][3]。", [1, 2, 3], []),
+    ("leading-zeros-beyond-nine-digits", "甲 [0000000001]。", 3, 1, "甲 [1]。", [1], []),
+    ("fullwidth-leading-zeros", "甲 [０００００００００２]。", 3, 1, "甲 [1]。", [2], []),
+    ("leading-zeros-in-range", "甲 [00000000002-00000000003]。", 3, 1, "甲 [1][2]。", [2, 3], []),
 ]
 
 
@@ -102,6 +108,10 @@ DELETION = [
     ("mixed-run-keeps-first-char", "甲\t [9]  乙", 3, 1, "甲\t乙", [], ["[9]"]),
     ("joined-run-collapsed-whole", "甲  [9] 乙", 3, 1, "甲 乙", [], ["[9]"]),
     ("untouched-run-beside-deletion", "甲  [9]乙", 3, 1, "甲  乙", [], ["[9]"]),
+    ("two-sided-run-before-punctuation", "甲 [9] 。", 3, 1, "甲。", [], ["[9]"]),
+    ("two-sided-tab-run-before-punctuation", "甲 [9]\t，乙", 3, 1, "甲，乙", [], ["[9]"]),
+    ("run-after-deletion-before-punctuation", "甲[9]  。", 3, 1, "甲。", [], ["[9]"]),
+    ("kept-marker-then-run-before-punctuation", "甲 [1] [9] 。", 3, 1, "甲 [1]。", [1], ["[9]"]),
     ("nested-splice", "甲 [[[9]1]2] 乙", 3, 1, "甲 乙", [], ["[9]", "[1]", "[2]"]),
 ]
 
@@ -133,6 +143,10 @@ EXEMPTION = [
     ("backticks-in-info-string-not-fence", "```x``` 與 [2]", 3, 1, "```x``` 與 [1]", [2], []),
     ("inline-double-backticks", "``a`[1]`` 甲 [2]", 3, 1, "``a`[1]`` 甲 [1]", [2], []),
     ("unmatched-backtick-literal", "甲 ` [2] 乙 [1]", 3, 1, "甲 ` [1] 乙 [2]", [2, 1], []),
+    ("inline-code-spans-single-newline", "甲 `a\n[1]` 乙 [2]", 3, 1, "甲 `a\n[1]` 乙 [1]", [2], []),
+    ("inline-code-stops-at-blank-line", "第一段 ` 符號 [1]。\n\n第二段 `code` [2]。", 3, 1,
+     "第一段 ` 符號 [1]。\n\n第二段 `code` [2]。", [1, 2], []),
+    ("inline-code-stops-at-whitespace-line", "甲 ` [1]\n \t\r\n乙 ` [2]", 3, 1, "甲 ` [1]\n \t\r\n乙 ` [2]", [1, 2], []),
 ]
 
 
@@ -165,13 +179,22 @@ def test_markers_huge_range_not_expanded_completes_fast() -> None:
     assert elapsed < 0.5
 
 
-def test_markers_range_over_duplicate_ids_repeats_first_occurrence() -> None:
+# Spec 106 的重複 ID 表（例 19、23）：Passage 清單是 A、B、A，base 1。例 20 走 answer，不在本檔。
+DUPLICATE_IDS = [
+    ("19", "x [3] y [2] z [1]。", "x [1] y [2] z [1]。"),
+    ("23", "x [1-3]。", "x [1][2][1]。"),
+]
+
+
+@pytest.mark.parametrize(("example", "raw", "answer"), DUPLICATE_IDS, ids=[r[0] for r in DUPLICATE_IDS])
+def test_markers_duplicate_ids_worked_example_point_to_first_occurrence(example: str, raw: str, answer: str) -> None:
     a = Passage(id="A", text="first A", source="doc.md")
     b = Passage(id="B", text="B", source="doc.md")
     a_again = Passage(id="A", text="second A", source="other.md")
 
-    result = postprocess("x [1-3]。", [a, b, a_again])
+    result = postprocess(raw, [a, b, a_again])
 
-    assert result.answer == "x [1][2][1]。"
+    assert result.answer == answer
     assert [(c.n, c.passage) for c in result.citations] == [(1, a), (2, b)]
+    assert result.passages == [a, b]
     assert result.fabricated_markers == []

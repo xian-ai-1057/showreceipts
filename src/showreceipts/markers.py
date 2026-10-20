@@ -1,11 +1,9 @@
 """Citation Marker 處理：把 marker 群組正規化成逐一的 `[n]`，依首次出現順序重編號，刪除 Fabricated Marker。
 
-套件內部 API：
-- `resolve(text, numbering)`：pipeline 用，回傳處理後答案、被引用的 Passage、Fabricated Marker。
-- `exempt_spans(text)`：fenced code block、inline code、純網址的 `[start, end)` 範圍；
-  這些範圍內的方括號數字不計入、不刪除、不改號。
-- `citation_markers(answer)`：處理後答案中每個 Citation Marker `[n]` 的位置與編號，不含豁免區；
-  給 Quality Report 判斷句子是否有引用、併句與去掉 marker 用。
+對外只有 `resolve(text, numbering)`，由 pipeline 呼叫。fenced code block、inline code、純網址是
+豁免區，區內的方括號數字不計入、不刪除、不改號。豁免區只在原始答案上判定；刪除 marker 後再判定
+結果可能不同，所以處理後答案中的 marker 位置要由 `resolve` 算出，不要重掃處理後的答案。
+私用區字元 U+E000–U+E002 是內部暫代符號，假設輸入不含（同 Spec 106）。
 """
 
 import math
@@ -21,28 +19,23 @@ _GROUP_RE = re.compile(rf"\[((?:[{_GROUP_CHARS}]*\d)+[{_GROUP_CHARS}]*)\]")
 _ITEM_SPLIT_RE = re.compile(r"[,，、]")
 _NUMBER_RE = re.compile(r"\d+")
 _RANGE_RE = re.compile(r"(\d+)[ \t]*[-–~～][ \t]*(\d+)")
-_CITATION_RE = re.compile(r"\[(\d+)\]")
 _MAX_DIGITS = 9
 _SPACES = " \t"
 _PUNCTUATION = frozenset("，。、；：！？）」』,.;:!?)")
-# 依 CommonMark：反引號 fence 那一行不能再有反引號；inline code 由等長的反引號串收尾。
+# 依 CommonMark：反引號 fence 那一行不能再有反引號；inline code 由等長的反引號串收尾，
+# 可跨行但不跨空行（段落邊界）。
 _FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}(?=[^`\n]*$)|~{3,})", re.M)
-_INLINE_CODE_RE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.S)
+_NOT_BLANK_LINE = r"(?!\n[ \t\r]*\n)."
+_INLINE_CODE_RE = re.compile(rf"(?<!`)(`+)(?!`)(?:{_NOT_BLANK_LINE})+?(?<!`)\1(?!`)", re.S)
 _URL_START_RE = re.compile(r"https?://")
 # 私用區字元：改寫後的 marker 以 _OPEN/_CLOSE 暫代方括號，被刪的群組先換成 _DELETED。
-_OPEN, _CLOSE, _DELETED = "", "", ""
+_OPEN, _CLOSE, _DELETED = "\ue000", "\ue001", "\ue002"
 
 
 class Resolved(NamedTuple):
     answer: str
     cited: list[Passage]
     fabricated: list[str]
-
-
-class CitationMarker(NamedTuple):
-    start: int
-    end: int
-    n: int
 
 
 def resolve(text: str, numbering: Mapping[int, Passage]) -> Resolved:
@@ -54,26 +47,22 @@ def resolve(text: str, numbering: Mapping[int, Passage]) -> Resolved:
     renumberer = _Renumberer(numbering)
     pieces: list[str] = []
     pos = 0
-    for start, end in exempt_spans(text):
+    for start, end in _exempt_spans(text):
         pieces += [renumberer.rewrite(text[pos:start]), text[start:end]]
         pos = end
     pieces.append(renumberer.rewrite(text[pos:]))
     return Resolved("".join(pieces), renumberer.cited, list(renumberer.fabricated))
 
 
-def exempt_spans(text: str) -> list[tuple[int, int]]:
+def _exempt_spans(text: str) -> list[tuple[int, int]]:
     """依序找 fenced code block、inline code、純網址，後一種只在前面找到的範圍之外找。"""
     spans = _fenced_code(text)
     for find in (_inline_code, _bare_urls):
-        spans = sorted(spans + [s for gap in _gaps(spans, len(text)) for s in find(text, *gap)])
+        found: list[tuple[int, int]] = []
+        for gap_start, gap_end in _gaps(spans, len(text)):
+            found += find(text, gap_start, gap_end)
+        spans = sorted(spans + found)
     return spans
-
-
-def citation_markers(answer: str) -> list[CitationMarker]:
-    markers = []
-    for gap in _gaps(exempt_spans(answer), len(answer)):
-        markers += [CitationMarker(m.start(), m.end(), int(m[1])) for m in _CITATION_RE.finditer(answer, *gap)]
-    return markers
 
 
 def _gaps(spans: list[tuple[int, int]], length: int) -> list[tuple[int, int]]:
@@ -100,10 +89,11 @@ def _inline_code(text: str, start: int, end: int) -> list[tuple[int, int]]:
 def _bare_urls(text: str, start: int, end: int) -> list[tuple[int, int]]:
     urls = []
     while m := _URL_START_RE.search(text, start, end):
-        start = m.end()
-        while start < end and not _ends_url(text[start]):
-            start += 1
-        urls.append((m.start(), start))
+        pos = m.end()
+        while pos < end and not _ends_url(text[pos]):
+            pos += 1
+        urls.append((m.start(), pos))
+        start = pos
     return urls
 
 
@@ -171,23 +161,24 @@ def _parse_group(body: str, numbering: Mapping[int, Passage]) -> tuple[list[Pass
 
 
 def _to_int(digits: str) -> int | float:
-    # 超長數字不轉 int：視為無限大，也避開 int() 的位數上限。
-    return math.inf if len(digits) > _MAX_DIGITS else int(digits)
+    # 前導零不算位數。超長數字不轉 int：視為無限大，也避開 int() 的位數上限。
+    significant = "".join(str(unicodedata.decimal(d)) for d in digits).lstrip("0")
+    return math.inf if len(significant) > _MAX_DIGITS else int(significant or "0")
 
 
 def _remove_deleted(text: str) -> str:
     """拿掉 _DELETED，只在刪除處清理空白。
 
-    後面緊接標點時，去掉刪除處前的半形空白與 tab；兩側都是半形空白或 tab 時，相接成的整串
-    只留第一個字元。換行與全形空白不動。
+    刪除處兩側的半形空白與 tab 相接成一串：後面接著標點時整串去掉；否則兩側都有空白時只留
+    第一個字元，只有一側有空白時不動。換行與全形空白不動。
     """
     pieces = text.split(_DELETED)
     out = pieces[0]
     for after in pieces[1:]:
-        if after[:1] in _PUNCTUATION:
-            out = out.rstrip(_SPACES)
+        rest = after.lstrip(_SPACES)
+        if rest[:1] in _PUNCTUATION:
+            out, after = out.rstrip(_SPACES), rest
         elif out.endswith(tuple(_SPACES)) and after.startswith(tuple(_SPACES)):
-            out = out[: len(out.rstrip(_SPACES)) + 1]
-            after = after.lstrip(_SPACES)
+            out, after = out[: len(out.rstrip(_SPACES)) + 1], rest
         out += after
     return out
