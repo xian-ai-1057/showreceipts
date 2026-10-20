@@ -14,6 +14,15 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## How work is closed
+
+- Work is closed through pull requests: the PR body carries one `Closes #<n>` line per ticket it resolves, so merging the PR closes them. `/implement-spec` opens one draft PR for its integration branch this way.
+- A spec issue (e.g. #9) is never listed in `Closes`; a human closes it after reviewing the merged work.
+
+## Reading blocking edges
+
+Tickets declare their blockers as GitHub native issue dependencies, not as text in the body. Read them with `gh issue view <n> --json blockedBy,blocking`. A ticket is ready when every issue in `blockedBy` is closed.
+
 ## When GraphQL is unavailable
 
 Some environments (e.g. Claude Code cloud sessions) block GitHub GraphQL, so `gh issue …` and `gh label list` fail with HTTP 403. Use the REST equivalents through `gh api` instead:
