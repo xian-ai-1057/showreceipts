@@ -1,11 +1,39 @@
 """postprocess 與 answer 的流程；兩者都經由 `_finalize` 把原始答案收成 Cited Answer。"""
 
+import logging
 from collections.abc import Mapping, Sequence
 
 from . import markers
 from .config import ShowReceiptsConfig
+from .generators import Generator
 from .models import Citation, CitedAnswer, Passage
 from .passages import dedupe
+from .prompts import build_prompt
+
+log = logging.getLogger(__name__)
+
+
+def answer(
+    question: str,
+    passages: Sequence[Passage],
+    generator: Generator,
+    *,
+    config: ShowReceiptsConfig | None = None,
+) -> CitedAnswer:
+    if not callable(generator):
+        raise TypeError(f"generator must be callable, got {type(generator).__name__}")
+    config = config or ShowReceiptsConfig()
+    unique = dedupe(passages)
+    if not unique:
+        log.info("no passages; returning the No-Answer Reply without calling the generator")
+        return _no_answer_reply(config, raw_answer="")
+    system_prompt, user_prompt = build_prompt(question, unique, config)
+    log.info("calling generator with %d passages", len(unique))
+    log.debug("system prompt:\n%s\nuser prompt:\n%s", system_prompt, user_prompt)
+    raw_answer = generator(system_prompt, user_prompt)
+    if not isinstance(raw_answer, str):
+        raise TypeError(f"generator returned {type(raw_answer).__name__}, expected str")
+    return _finalize(raw_answer, unique, {n: p for n, p in enumerate(unique, start=1)})
 
 
 def postprocess(
