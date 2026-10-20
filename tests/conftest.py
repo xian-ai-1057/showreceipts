@@ -32,7 +32,11 @@ def _offline_generator_endpoint(request: pytest.FixtureRequest, monkeypatch: pyt
     if request.node.get_closest_marker("requires_ollama"):
         return
     monkeypatch.setenv("SHOWRECEIPTS_BASE_URL", CLOSED_ENDPOINT)
+    monkeypatch.delenv("SHOWRECEIPTS_MODEL", raising=False)
     monkeypatch.delenv("SHOWRECEIPTS_API_KEY", raising=False)
+    # urllib 會讀 HTTP(S)_PROXY；離線測試的請求一律直連、不送進 proxy。小寫的 no_proxy 優先，兩者都設。
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(name, "*")
 
 
 def chat_reply(content: Any) -> tuple[int, dict[str, Any]]:

@@ -1,4 +1,4 @@
-"""預設 prompt 與模板組裝：把問題與已去重的 Passage 組成 (system_prompt, user_prompt)。"""
+"""預設 prompt 與模板組裝：把問題與 Passage 組成 (system_prompt, user_prompt)。"""
 
 import logging
 import re
@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 
 from .config import ShowReceiptsConfig
 from .models import Passage
+from .passages import dedupe
 
 DEFAULT_SYSTEM_PROMPT_TEMPLATE = """你是一個嚴謹的問答助理。你會收到使用者問題與多段【參考資料】，每段以 [n] 編號標示。
 
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 def build_prompt(
     question: str, passages: Sequence[Passage], config: ShowReceiptsConfig | None = None
 ) -> tuple[str, str]:
-    """`passages` 依給定順序編 1..M；呼叫端負責先去重。"""
+    """`passages` 去重後依給定順序編 1..M，與 answer() 的編號一致。"""
     config = config or ShowReceiptsConfig()
     if config.system_prompt is not None:
         system = config.system_prompt
@@ -44,7 +45,8 @@ def build_prompt(
     block_template = config.passage_block_template
     if block_template is not None:
         _warn_missing("passage_block_template", block_template, _BLOCK_REQUIRED)
-    context_blocks = "\n".join(_block(n, p, block_template) for n, p in enumerate(passages, start=1))
+    numbered = enumerate(dedupe(passages), start=1)
+    context_blocks = "\n".join(_block(n, p, block_template) for n, p in numbered)
 
     user_template = config.user_prompt_template
     if user_template is None:

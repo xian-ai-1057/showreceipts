@@ -73,7 +73,10 @@ class OpenAICompatGenerator:
                 request = urllib.request.Request(self.url, data=data, headers=headers, method="POST")
                 with urllib.request.urlopen(request, timeout=self.timeout) as response:
                     return json.loads(response.read().decode("utf-8"))
-            except (OSError, http.client.HTTPException, ValueError) as err:
+            # 極深的巢狀 JSON 會讓 json.loads 拋 RecursionError，同樣算格式錯誤的回應。
+            except (OSError, http.client.HTTPException, ValueError, RecursionError) as err:
+                if isinstance(err, urllib.error.HTTPError):
+                    err.close()
                 if attempt >= self.max_retries or not _is_retryable(err):
                     raise GeneratorError(f"request to {self.url} failed: {err}") from err
                 delay = min(0.5 * 2**attempt, 8.0)
@@ -85,5 +88,10 @@ class OpenAICompatGenerator:
 def _is_retryable(err: Exception) -> bool:
     if isinstance(err, urllib.error.HTTPError):
         return err.code in _RETRYABLE_STATUS or err.code >= 500
+    if isinstance(err, urllib.error.URLError):
+        # 連不上時 reason 是 OSError；網址本身寫錯（unknown url type、no host given）時是字串，重試也沒用。
+        return isinstance(err.reason, OSError)
+    if isinstance(err, http.client.InvalidURL):
+        return False
     # 等待回應逾時拋 TimeoutError、連線被中斷拋 RemoteDisconnected，兩者都不是 URLError。
-    return isinstance(err, urllib.error.URLError | ConnectionError | TimeoutError | http.client.HTTPException)
+    return isinstance(err, ConnectionError | TimeoutError | http.client.HTTPException)

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
+from showreceipts.prompts import build_prompt
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
@@ -79,6 +80,23 @@ def test_answer_numbers_passages_in_given_order_after_dedupe_ignoring_score(fake
     assert cited.answer == "甲 [1]，乙 [2]。"
 
 
+def test_build_prompt_called_directly_dedupes_like_answer(fake_generator) -> None:
+    passages = [
+        Passage(id="x", text="one", source="s"),
+        Passage(id="x", text="dup", source="s"),
+        Passage(id="y", text="two", source="s"),
+    ]
+
+    answer("q", passages, fake_generator)
+    system, user = build_prompt("q", passages)
+
+    assert (system, user) == fake_generator.calls[0]
+    assert "[1] 來源: s\none\n" in user
+    assert "[2] 來源: s\ntwo\n" in user
+    assert "dup" not in user
+    assert "[3]" not in user
+
+
 def test_answer_no_passages_returns_no_answer_reply_without_calling_generator(fake_generator) -> None:
     golden = json.loads((GOLDEN / "cited_answer_no_answer.json").read_text(encoding="utf-8"))
 
@@ -86,6 +104,25 @@ def test_answer_no_passages_returns_no_answer_reply_without_calling_generator(fa
 
     assert fake_generator.calls == []
     assert cited.model_dump(mode="json") == golden
+
+
+def test_answer_ignores_input_marker_base_zero() -> None:
+    a, b = Passage(id="a", text="ta", source="s"), Passage(id="b", text="tb", source="s")
+    config = ShowReceiptsConfig(input_marker_base=0)
+
+    cited = answer("q", [a, b], lambda system, user: "x [1] y [0] z [2]", config=config)
+
+    assert cited.answer == "x [1] y z [2]"
+    assert [c.passage.id for c in cited.citations] == ["a", "b"]
+    assert cited.fabricated_markers == ["[0]"]
+
+
+def test_answer_no_passages_custom_no_answer_reply_used(fake_generator) -> None:
+    cited = answer("q", [], fake_generator, config=ShowReceiptsConfig(no_answer_reply="無資料"))
+
+    assert cited.answer == "無資料"
+    assert cited.raw_answer == ""
+    assert fake_generator.calls == []
 
 
 def test_answer_non_str_generator_reply_raises_type_error() -> None:
@@ -97,6 +134,14 @@ def test_answer_non_str_generator_reply_raises_type_error() -> None:
 def test_answer_non_callable_generator_raises_type_error(passages: list[Passage]) -> None:
     with pytest.raises(TypeError):
         answer("q", passages, "not a generator")
+
+
+@pytest.mark.parametrize("element", [{"id": "a", "text": "t", "source": "s"}, "just a string", None])
+def test_answer_non_passage_element_raises_type_error_naming_index(fake_generator, element) -> None:
+    with pytest.raises(TypeError, match=r"passages\[1\]"):
+        answer("q", [Passage(id="a", text="t", source="s"), element], fake_generator)
+
+    assert fake_generator.calls == []
 
 
 def test_answer_generator_exception_propagates_unchanged() -> None:

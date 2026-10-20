@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from conftest import chat_reply
+from conftest import CLOSED_ENDPOINT, chat_reply
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
-from showreceipts.cli import main
+from showreceipts.cli import default_generator, main
 
 PASSAGES = [
     Passage(id="A", text="first A", source="doc.md", locator="第 1 頁", score=0.9, metadata={"k": 1}),
@@ -87,3 +87,34 @@ def test_cli_answer_generator_error_exits_nonzero_with_message(
     assert code == 1
     assert captured.out == ""
     assert captured.err.startswith("showreceipts: ")
+    assert CLOSED_ENDPOINT in captured.err
+
+
+def test_default_generator_without_env_points_at_local_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SHOWRECEIPTS_BASE_URL")
+
+    generator = default_generator()
+
+    assert generator.url == "http://localhost:11434/v1/chat/completions"
+    assert generator.model == "qwen3.5:4b-mlx"
+    assert generator.api_key == "ollama"
+
+
+def test_default_generator_args_override_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SHOWRECEIPTS_BASE_URL", "http://env-host/v1")
+    monkeypatch.setenv("SHOWRECEIPTS_MODEL", "env-model")
+    monkeypatch.setenv("SHOWRECEIPTS_API_KEY", "env-key")
+
+    from_env = default_generator()
+    from_args = default_generator(base_url="http://arg-host/v1", model="arg-model", api_key="arg-key")
+
+    assert (from_env.url, from_env.model, from_env.api_key) == (
+        "http://env-host/v1/chat/completions",
+        "env-model",
+        "env-key",
+    )
+    assert (from_args.url, from_args.model, from_args.api_key) == (
+        "http://arg-host/v1/chat/completions",
+        "arg-model",
+        "arg-key",
+    )

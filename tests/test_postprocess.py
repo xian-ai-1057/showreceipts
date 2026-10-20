@@ -99,3 +99,8 @@ def test_postprocess_only_fabricated_markers_returns_empty_string() -> None:
     assert cited.answer == ""
     assert cited.passages == _passages("p1")
     assert cited.fabricated_markers == ["[9]", "[8]"]
+
+
+def test_postprocess_non_passage_element_raises_type_error_naming_index() -> None:
+    with pytest.raises(TypeError, match=r"passages\[0\]"):
+        postprocess("甲 [1]", [{"id": "a", "text": "t", "source": "s"}])

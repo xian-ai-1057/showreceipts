@@ -5,7 +5,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from conftest import chat_reply
+from conftest import CLOSED_ENDPOINT, chat_reply
 from demo.app import create_app
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
 
@@ -76,7 +76,7 @@ def test_demo_answer_generator_error_returns_502(monkeypatch: pytest.MonkeyPatch
     response = client.post("/answer", json={"question": "q", "passages": [p.model_dump(mode="json") for p in PASSAGES]})
 
     assert response.status_code == 502
-    assert isinstance(response.json()["detail"], str)
+    assert CLOSED_ENDPOINT in response.json()["detail"]
 
 
 def test_demo_answer_without_passages_returns_422(fake_generator) -> None:

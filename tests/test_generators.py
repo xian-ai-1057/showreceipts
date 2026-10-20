@@ -1,4 +1,4 @@
-"""OpenAICompatGenerator：對本機假端點驗證請求格式、重試與退避、錯誤包裝。唯一碰網路的測試。"""
+"""OpenAICompatGenerator 的網路邊界：對 127.0.0.1 上的假端點驗證請求格式、重試與退避、錯誤包裝。"""
 
 import time
 import urllib.error
@@ -90,6 +90,15 @@ def test_openai_compat_timeout_raises_generator_error(chat_server, sleeps) -> No
     assert sleeps == []
 
 
+def test_openai_compat_timeout_retried(chat_server, sleeps) -> None:
+    chat_server.responses = [("delay", 1.0), chat_reply("in time")]
+
+    reply = OpenAICompatGenerator(base_url=chat_server.base_url, model="m", timeout=0.2, max_retries=1)("s", "u")
+
+    assert reply == "in time"
+    assert sleeps == [0.5]
+
+
 @pytest.mark.parametrize(
     "response",
     [
@@ -100,6 +109,7 @@ def test_openai_compat_timeout_raises_generator_error(chat_server, sleeps) -> No
         (200, {"result": "no choices"}),
         chat_reply(None),
         chat_reply(["not", "a", "string"]),
+        (200, b"[" * 100_000 + b"]" * 100_000),
     ],
 )
 def test_openai_compat_non_retryable_failure_raises_generator_error_once(chat_server, sleeps, response) -> None:
@@ -112,8 +122,11 @@ def test_openai_compat_non_retryable_failure_raises_generator_error_once(chat_se
     assert sleeps == []
 
 
-def test_openai_compat_base_url_without_scheme_raises_generator_error(sleeps) -> None:
+@pytest.mark.parametrize(
+    "base_url", ["", "localhost:11434/v1", "http://", "http://127.0.0.1:abc/v1", "http://exa mple.com/v1"]
+)
+def test_openai_compat_invalid_base_url_raises_generator_error_without_retry(sleeps, base_url: str) -> None:
     with pytest.raises(GeneratorError):
-        OpenAICompatGenerator(base_url="", model="m")("s", "u")
+        OpenAICompatGenerator(base_url=base_url, model="m")("s", "u")
 
     assert sleeps == []
