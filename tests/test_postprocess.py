@@ -1,4 +1,4 @@
-"""postprocess：外部答案 + Passage → Cited Answer（這一階段只處理單一 `[n]`）。"""
+"""postprocess：外部答案 + Passage → Cited Answer。marker 文法的完整表格在 test_markers.py。"""
 
 import pytest
 
