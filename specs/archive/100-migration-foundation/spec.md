@@ -394,6 +394,6 @@ new_citations = [
 
 - 重建計畫：`~/.claude/plans/rag-citation-mvp-rag-citation-memoized-locket.md` §「Spec 100 — Migration & Foundation」、§「Phase 1 — Migration」
 - 既有 Tier 1 程式碼：`rag.py`（350 行）、`app.py`（100 行）
-- SDD 規範：[`specs/CLAUDE.md`](../CLAUDE.md)
+- SDD 規範：[`specs/CLAUDE.md`](../tier2-specs-rules.md)
 - Profile：`~/.claude/skills/sdd-agent-teams/references/profiles/python-llm.md`
 - 下游 spec：[Spec 102](../102-multi-format-loaders/spec.md)、[Spec 103](../103-chat-history-persistence/spec.md)、[Spec 104](../104-quality-eval-hallucination/spec.md)、[Spec 105](../105-ui-integration/spec.md)

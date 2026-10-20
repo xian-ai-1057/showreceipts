@@ -1,3 +1,5 @@
+> **已封存**：Tier 2 時期的 specs 規則（原 `specs/CLAUDE.md`），只供參考，不再生效。現行規則見根目錄 `CLAUDE.md`、issue #9 與 `docs/adr/0002`：契約只在 `src/showreceipts/models.py` 與 `config.py`，specs 目錄不再放 contracts。
+
 # Specs Directory — Guide for Teammates
 
 ## 你在這裡時的規則

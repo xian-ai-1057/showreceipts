@@ -87,6 +87,16 @@ def test_cited_answer_non_contiguous_n_rejected() -> None:
         )
 
 
+def test_cited_answer_out_of_order_n_rejected() -> None:
+    a, b = _passage("a"), _passage("b")
+    with pytest.raises(ValidationError, match="1..2 in order"):
+        CitedAnswer(
+            answer="", raw_answer="",
+            citations=[Citation(n=2, passage=a), Citation(n=1, passage=b)],
+            passages=[a, b],
+        )
+
+
 def test_cited_answer_duplicate_passage_ids_rejected() -> None:
     with pytest.raises(ValidationError, match="duplicate"):
         CitedAnswer(answer="", raw_answer="", passages=[_passage("a"), _passage("a")])

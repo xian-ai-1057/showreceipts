@@ -461,5 +461,5 @@ Streamlit 每次 widget 互動都會 rerun 整支 `app.py`。靠以下保 state�
 
 - 重建計畫：`~/.claude/plans/rag-citation-mvp-rag-citation-memoized-locket.md` §「Spec 105 — UI Integration」、§「End-to-End UAT」
 - 上游：[Spec 100](../100-migration-foundation/spec.md)、[Spec 102](../102-multi-format-loaders/spec.md)、[Spec 103](../103-chat-history-persistence/spec.md)、[Spec 104](../104-quality-eval-hallucination/spec.md)
-- SDD 規範：[`specs/CLAUDE.md`](../CLAUDE.md)
+- SDD 規範：[`specs/CLAUDE.md`](../tier2-specs-rules.md)
 - Tier 1 UI 既有檔：`app.py`（沿用結構）

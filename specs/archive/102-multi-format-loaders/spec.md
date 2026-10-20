@@ -324,4 +324,4 @@ if total_rows > 10000:
 - 重建計畫：`~/.claude/plans/rag-citation-mvp-rag-citation-memoized-locket.md` §「Spec 102 — Multi-format Loaders」
 - 上游：[Spec 100](../100-migration-foundation/spec.md)
 - 下游：[Spec 105](../105-ui-integration/spec.md)
-- SDD 規範：[`specs/CLAUDE.md`](../CLAUDE.md)
+- SDD 規範：[`specs/CLAUDE.md`](../tier2-specs-rules.md)

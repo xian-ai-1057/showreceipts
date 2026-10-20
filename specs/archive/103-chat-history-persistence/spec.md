@@ -344,5 +344,5 @@ WAL mode 會留下 `.wal` 與 `.shm` 兩個附屬檔；正常關閉時會 checkp
 - 重建計畫：`~/.claude/plans/rag-citation-mvp-rag-citation-memoized-locket.md` §「Spec 103 — Chat History Persistence」
 - 上游：[Spec 100](../100-migration-foundation/spec.md)、[Spec 102](../102-multi-format-loaders/spec.md)
 - 下游：[Spec 105](../105-ui-integration/spec.md)
-- SDD 規範：[`specs/CLAUDE.md`](../CLAUDE.md)
+- SDD 規範：[`specs/CLAUDE.md`](../tier2-specs-rules.md)
 - SQLite WAL 文件：https://sqlite.org/wal.html

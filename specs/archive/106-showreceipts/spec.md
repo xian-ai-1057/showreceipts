@@ -1,6 +1,6 @@
 # Spec 106 — showreceipts（框架無關引用層）
 
-> 對應 [ADR-0001](../../docs/adr/0001-framework-agnostic-citation-layer.md)、[GLOSSARY.md](../../GLOSSARY.md)、[相關專案調查](../../docs/research/related-projects.md)，以及 Lead（KEE）已拍板的決策 D1–D28（本文以 `Dn` 標註出處）。
+> 對應 [ADR-0001](../../../docs/adr/0001-framework-agnostic-citation-layer.md)、[GLOSSARY.md](../../../GLOSSARY.md)、[相關專案調查](../../../docs/research/related-projects.md)，以及 Lead（KEE）已拍板的決策 D1–D28（本文以 `Dn` 標註出處）。
 > 上游：Spec 100（`src/*` 拆檔與 DTO）、Spec 103（對話歷史）、Spec 104（品質評估演算法）、Spec 105（UI 整合）——本 spec 取代其中「檢索之後」的部分，其餘保留為 Demo Host。
 > 下游：內部 demo（D2、D28）。之後的 IT 移交 spec、抽成獨立 pip 套件、LlamaIndex Adapter 都不在本 spec 範圍。
 
@@ -1393,10 +1393,10 @@ def main() -> None:
 
 ## 10. 參考
 
-- 決策紀錄：[ADR-0001](../../docs/adr/0001-framework-agnostic-citation-layer.md)
-- 術語：[GLOSSARY.md](../../GLOSSARY.md)
-- 調查：[docs/research/related-projects.md](../../docs/research/related-projects.md)
+- 決策紀錄：[ADR-0001](../../../docs/adr/0001-framework-agnostic-citation-layer.md)
+- 術語：[GLOSSARY.md](../../../GLOSSARY.md)
+- 調查：[docs/research/related-projects.md](../../../docs/research/related-projects.md)
 - 上游 spec：[Spec 100](../100-migration-foundation/spec.md)、[Spec 103](../103-chat-history-persistence/spec.md)、[Spec 104](../104-quality-eval-hallucination/spec.md)、[Spec 105](../105-ui-integration/spec.md)
-- SDD 規範：[specs/CLAUDE.md](../CLAUDE.md)、[specs/plan.md](../plan.md)（Tier 1 既有行為表）
+- SDD 規範：[specs/CLAUDE.md](../tier2-specs-rules.md)、[specs/plan.md](../plan.md)（Tier 1 既有行為表）
 - 契約：[contracts/showreceipts_schema.py](contracts/showreceipts_schema.py)、[contracts/demo_host_history_schema.py](contracts/demo_host_history_schema.py)、[contracts/fixtures/](contracts/fixtures/)
-- 範例輸入：[data/sample_reranked.json](../../data/sample_reranked.json)
+- 範例輸入：[data/sample_reranked.json](../../../data/sample_reranked.json)
