@@ -3,7 +3,7 @@
 每列是（例號, 原答, N, base, 最終答案, citations 的 Passage 編號, fabricated_markers）。
 Passage 編號 k 指給定清單中的第 k 個（1-based），與 base 無關。例號是 Spec 106 的編號，
 文字 id 的列是 #9 與開跑前裁決新增的行為（範圍符號、豁免區、刪除處的空白）。
-重複 ID 的例 19、23 另成一表；例 20 經由 answer，待 answer 進來後補。
+重複 ID 的例 19、20、23 另成一表，例 20 經由 answer。
 """
 
 import time
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from showreceipts import CitedAnswer, Passage, ShowReceiptsConfig, postprocess
+from showreceipts import CitedAnswer, Passage, ShowReceiptsConfig, answer, postprocess
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
@@ -21,9 +21,9 @@ def _run(raw: str, n: int, base: int):
     return postprocess(raw, passages, config=ShowReceiptsConfig(input_marker_base=base))
 
 
-def _check(raw: str, n: int, base: int, answer: str, cited: list[int], fabricated: list[str]) -> None:
+def _check(raw: str, n: int, base: int, expected: str, cited: list[int], fabricated: list[str]) -> None:
     result = _run(raw, n, base)
-    assert result.answer == answer
+    assert result.answer == expected
     assert [c.passage.id for c in result.citations] == [f"P{k}" for k in cited]
     assert result.fabricated_markers == fabricated
 
@@ -82,12 +82,12 @@ GRAMMAR = [
 
 
 @pytest.mark.parametrize(
-    ("example", "raw", "n", "base", "answer", "cited", "fabricated"), GRAMMAR, ids=[r[0] for r in GRAMMAR]
+    ("example", "raw", "n", "base", "expected", "cited", "fabricated"), GRAMMAR, ids=[r[0] for r in GRAMMAR]
 )
 def test_markers_grammar_worked_example_normalized(
-    example: str, raw: str, n: int, base: int, answer: str, cited: list[int], fabricated: list[str]
+    example: str, raw: str, n: int, base: int, expected: str, cited: list[int], fabricated: list[str]
 ) -> None:
-    _check(raw, n, base, answer, cited, fabricated)
+    _check(raw, n, base, expected, cited, fabricated)
 
 
 DELETION = [
@@ -117,12 +117,12 @@ DELETION = [
 
 
 @pytest.mark.parametrize(
-    ("example", "raw", "n", "base", "answer", "cited", "fabricated"), DELETION, ids=[r[0] for r in DELETION]
+    ("example", "raw", "n", "base", "expected", "cited", "fabricated"), DELETION, ids=[r[0] for r in DELETION]
 )
 def test_markers_deletion_worked_example_cleaned_locally(
-    example: str, raw: str, n: int, base: int, answer: str, cited: list[int], fabricated: list[str]
+    example: str, raw: str, n: int, base: int, expected: str, cited: list[int], fabricated: list[str]
 ) -> None:
-    _check(raw, n, base, answer, cited, fabricated)
+    _check(raw, n, base, expected, cited, fabricated)
 
 
 EXEMPTION = [
@@ -151,12 +151,12 @@ EXEMPTION = [
 
 
 @pytest.mark.parametrize(
-    ("example", "raw", "n", "base", "answer", "cited", "fabricated"), EXEMPTION, ids=[r[0] for r in EXEMPTION]
+    ("example", "raw", "n", "base", "expected", "cited", "fabricated"), EXEMPTION, ids=[r[0] for r in EXEMPTION]
 )
 def test_markers_exempt_region_left_untouched(
-    example: str, raw: str, n: int, base: int, answer: str, cited: list[int], fabricated: list[str]
+    example: str, raw: str, n: int, base: int, expected: str, cited: list[int], fabricated: list[str]
 ) -> None:
-    _check(raw, n, base, answer, cited, fabricated)
+    _check(raw, n, base, expected, cited, fabricated)
 
 
 def test_markers_golden_cited_answer_reproduced() -> None:
@@ -179,22 +179,29 @@ def test_markers_huge_range_not_expanded_completes_fast() -> None:
     assert elapsed < 0.5
 
 
-# Spec 106 的重複 ID 表（例 19、23）：Passage 清單是 A、B、A，base 1。例 20 走 answer，不在本檔。
+# Spec 106 的重複 ID 表：Passage 清單是 A、B、A′（與 A 同 ID、內文不同），postprocess 用 base 1。
+# 每列是（例號, 入口, 原答, 最終答案, citations 依 n 的 Passage ID）。
 DUPLICATE_IDS = [
-    ("19", "x [3] y [2] z [1]。", "x [1] y [2] z [1]。"),
-    ("23", "x [1-3]。", "x [1][2][1]。"),
+    ("19", "postprocess", "x [3] y [2] z [1]。", "x [1] y [2] z [1]。", ["A", "B"]),
+    ("20", "answer", "y [2] x [1]。", "y [1] x [2]。", ["B", "A"]),
+    ("23", "postprocess", "x [1-3]。", "x [1][2][1]。", ["A", "B"]),
 ]
 
 
-@pytest.mark.parametrize(("example", "raw", "answer"), DUPLICATE_IDS, ids=[r[0] for r in DUPLICATE_IDS])
-def test_markers_duplicate_ids_worked_example_point_to_first_occurrence(example: str, raw: str, answer: str) -> None:
+@pytest.mark.parametrize(
+    ("example", "entry", "raw", "expected", "cited"), DUPLICATE_IDS, ids=[r[0] for r in DUPLICATE_IDS]
+)
+def test_markers_duplicate_ids_worked_example_point_to_first_occurrence(
+    example: str, entry: str, raw: str, expected: str, cited: list[str], fake_generator
+) -> None:
     a = Passage(id="A", text="first A", source="doc.md")
     b = Passage(id="B", text="B", source="doc.md")
     a_again = Passage(id="A", text="second A", source="other.md")
+    fake_generator.reply = raw
 
-    result = postprocess(raw, [a, b, a_again])
+    result = answer("q", [a, b, a_again], fake_generator) if entry == "answer" else postprocess(raw, [a, b, a_again])
 
-    assert result.answer == answer
-    assert [(c.n, c.passage) for c in result.citations] == [(1, a), (2, b)]
+    assert result.answer == expected
+    assert [(c.n, c.passage) for c in result.citations] == [(n, {"A": a, "B": b}[i]) for n, i in enumerate(cited, 1)]
     assert result.passages == [a, b]
     assert result.fabricated_markers == []
