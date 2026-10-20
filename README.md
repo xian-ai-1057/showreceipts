@@ -11,8 +11,8 @@
 ## 開發
 
 ```bash
-uv sync              # 安裝核心（只依賴 pydantic）與測試工具
-uv run pytest -q     # 全部測試皆離線執行
+uv sync --all-extras              # 安裝核心、全部 extras 與測試工具
+uv run --all-extras pytest -q     # 全部測試皆離線執行
 ```
 
 選配依賴：`pdf`、`docx`（文件切段）、`demo`（demo 後端），例如 `uv sync --extra demo`。

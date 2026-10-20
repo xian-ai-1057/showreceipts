@@ -12,3 +12,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Claude Code：agent worktree 與個人設定
+.claude/worktrees/
+.claude/settings.local.json

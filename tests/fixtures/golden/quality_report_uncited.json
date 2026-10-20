@@ -14,7 +14,7 @@
       "overlap_score": 0.6129
     },
     {
-      "sentence": "一般消費回饋為 0.3% 。",
+      "sentence": "一般消費回饋為 0.3%。",
       "supported": false,
       "best_match_passage_id": null,
       "overlap_score": 0.0
@@ -23,7 +23,7 @@
   "unsupported_entities": [],
   "uncited_sentences": [
     {
-      "sentence": "一般消費回饋為 0.3% 。",
+      "sentence": "一般消費回饋為 0.3%。",
       "sentence_index": 2,
       "numbers": [
         "0.3"
