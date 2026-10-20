@@ -8,13 +8,6 @@ __pycache__/
 # OS junk
 .DS_Store
 
-# Local data
-data/chroma/
-data/docs/*
-!data/docs/.gitkeep
-data/history.sqlite
-*.sqlite
-
 # Build artefacts
 dist/
 build/
