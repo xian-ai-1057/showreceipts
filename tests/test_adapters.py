@@ -13,6 +13,7 @@ from showreceipts.adapters import from_arrkb, from_langchain
 ROOT = Path(__file__).parent.parent
 SAMPLE = json.loads((ROOT / "data" / "sample_reranked.json").read_text(encoding="utf-8"))
 GOLDEN_PASSAGE = json.loads((ROOT / "tests" / "fixtures" / "golden" / "passage_arrkb.json").read_text(encoding="utf-8"))
+RICHART_PASSAGES = json.loads((ROOT / "data" / "richart_passages.json").read_text(encoding="utf-8"))
 
 
 def _record(context_id: str, *, score: float | None = None, **fields: object) -> dict[str, object]:
@@ -26,6 +27,12 @@ def test_adapters_arrkb_sample_first_item_matches_golden_passage() -> None:
     passages = from_arrkb(SAMPLE)
 
     assert passages[0].model_dump(mode="json") == GOLDEN_PASSAGE
+
+
+def test_adapters_arrkb_sample_equals_demo_richart_passages() -> None:
+    passages = from_arrkb(SAMPLE)
+
+    assert [p.model_dump(mode="json") for p in passages] == RICHART_PASSAGES
 
 
 def test_adapters_arrkb_envelope_list_and_single_record_accepted() -> None:
