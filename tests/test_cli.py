@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from conftest import CLOSED_ENDPOINT, chat_reply
-from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
+from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess, select, split
 from showreceipts.cli import default_generator, main
 
 PASSAGES = [
@@ -17,6 +17,7 @@ PASSAGES = [
     Passage(id="A", text="second A", source="other.md"),
 ]
 ANSWER = "x [2] y [0] z [3] w [9]。"
+TINY_MD = Path(__file__).parent / "fixtures" / "docs" / "tiny.md"
 
 
 @pytest.mark.parametrize("answer_from", ["stdin", "file"])
@@ -45,12 +46,47 @@ def test_cli_answer_matches_python_api(fake_generator, tmp_path: Path, capsys: p
     passages_file.write_text(json.dumps([p.model_dump(mode="json") for p in PASSAGES]), encoding="utf-8")
     fake_generator.reply = ANSWER
 
-    code = main(["answer", "--question", "A 是什麼？", "--passages", str(passages_file)], generator=fake_generator)
+    argv = ["answer", "--question", "A 是什麼？", "--passages", str(passages_file), "--budget", "5"]
+    code = main(argv, generator=fake_generator)
 
-    expected = answer("A 是什麼？", PASSAGES, fake_generator)
+    expected = answer("A 是什麼？", select("A 是什麼？", PASSAGES, 5), fake_generator)
     assert code == 0
     assert json.loads(capsys.readouterr().out) == expected.model_dump(mode="json")
     assert fake_generator.calls[0] == fake_generator.calls[1]
+
+
+def test_cli_answer_document_matches_split_select_answer(fake_generator, capsys: pytest.CaptureFixture[str]) -> None:
+    fake_generator.reply = "引用機制會重新編號 [1]。"
+
+    code = main(["answer", "-q", "引用如何重新編號？", str(TINY_MD), "--budget", "150"], generator=fake_generator)
+
+    passages = select("引用如何重新編號？", split(TINY_MD), 150)
+    expected = answer("引用如何重新編號？", passages, fake_generator)
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == expected.model_dump(mode="json")
+    assert fake_generator.calls[0] == fake_generator.calls[1]
+
+
+def test_cli_split_matches_python_api(capsys: pytest.CaptureFixture[str]) -> None:
+    code = main(["split", str(TINY_MD), "--target-chars", "60", "--source", "系統簡介"])
+
+    expected = split(TINY_MD, target_chars=60, source="系統簡介")
+    assert code == 0
+    assert json.loads(capsys.readouterr().out) == [p.model_dump(mode="json") for p in expected]
+
+
+def test_cli_split_unsupported_format_exits_nonzero_with_message(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    sheet = tmp_path / "fees.xlsx"
+    sheet.write_bytes(b"PK")
+
+    code = main(["split", str(sheet)])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("showreceipts: unsupported document format")
 
 
 def test_cli_answer_flags_override_env_for_default_generator(

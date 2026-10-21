@@ -18,10 +18,15 @@ from .models import (
     UncitedSentence,
 )
 from .pipeline import answer, postprocess
+from .selector import Selector, select
+from .splitter import split
 
 __all__ = [
     "answer",
     "postprocess",
+    "split",
+    "select",
+    "Selector",
     "Generator",
     "OpenAICompatGenerator",
     "GeneratorError",

@@ -12,6 +12,8 @@ from .config import ShowReceiptsConfig
 from .generators import Generator, GeneratorError, OpenAICompatGenerator
 from .models import Passage
 from .pipeline import answer, postprocess
+from .selector import select
+from .splitter import split
 
 _PASSAGE_LIST = TypeAdapter(list[Passage])
 
@@ -21,7 +23,7 @@ def main(argv: Sequence[str] | None = None, *, generator: Generator | None = Non
     args.generator = generator
     try:
         output = args.run(args)
-    except (OSError, ValueError, GeneratorError) as exc:
+    except (OSError, ValueError, ImportError, GeneratorError) as exc:
         print(f"showreceipts: {exc}", file=sys.stderr)
         return 1
     sys.stdout.write(output + "\n")
@@ -41,12 +43,21 @@ def default_generator(
     return OpenAICompatGenerator(base_url=base_url, model=model, api_key=api_key)
 
 
+def _split(args: argparse.Namespace) -> str:
+    passages = split(args.document, target_chars=args.target_chars, source=args.source)
+    return _PASSAGE_LIST.dump_json(passages, indent=2).decode()
+
+
 def _answer(args: argparse.Namespace) -> str:
-    passages = _PASSAGE_LIST.validate_json(Path(args.passages).read_bytes())
+    if args.document:
+        passages = split(args.document)
+    else:
+        passages = _PASSAGE_LIST.validate_json(Path(args.passages).read_bytes())
+    selected = select(args.question, passages, args.budget)
     generator = args.generator
     if generator is None:
         generator = default_generator(base_url=args.base_url, model=args.model, api_key=args.api_key)
-    return answer(args.question, passages, generator).model_dump_json(indent=2)
+    return answer(args.question, selected, generator).model_dump_json(indent=2)
 
 
 def _postprocess(args: argparse.Namespace) -> str:
@@ -60,11 +71,20 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="showreceipts", description="不綁定 RAG 框架的引用層")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    ans = commands.add_parser("answer", help="問題 + Passage JSON → 呼叫 Generator → Cited Answer JSON")
+    spl = commands.add_parser("split", help="Document 檔案 → Passage JSON")
+    spl.add_argument("document", help="Document 檔案；格式由副檔名決定")
+    spl.add_argument("--target-chars", type=int, default=500, help="每段目標字數")
+    spl.add_argument("--source", help="Passage 的 Source；預設為檔名")
+    spl.set_defaults(run=_split)
+
+    ans = commands.add_parser(
+        "answer", help="問題 + Document 檔案或 Passage JSON → split → select → 呼叫 Generator → Cited Answer JSON"
+    )
     ans.add_argument("--question", "-q", required=True, help="問題文字")
-    # 問題用旗標；位置參數留給 Document 檔案，它與 --passages 互斥、同屬這個 group。
     source = ans.add_mutually_exclusive_group(required=True)
-    source.add_argument("--passages", help="Passage JSON 清單檔")
+    source.add_argument("document", nargs="?", help="Document 檔案；先 split 再 select")
+    source.add_argument("--passages", help="Passage JSON 清單檔；直接 select")
+    ans.add_argument("--budget", type=int, default=12000, help="送進 prompt 的 Passage 總字數上限")
     ans.add_argument("--base-url", help="OpenAI 相容端點；預設讀 SHOWRECEIPTS_BASE_URL，再預設本機 Ollama")
     ans.add_argument("--model", help="模型名稱；預設讀 SHOWRECEIPTS_MODEL")
     ans.add_argument("--api-key", help="API key；預設讀 SHOWRECEIPTS_API_KEY")
