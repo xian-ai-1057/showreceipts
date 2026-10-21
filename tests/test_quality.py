@@ -108,6 +108,14 @@ def test_quality_entities_num_before_date_each_in_order_of_appearance() -> None:
     ]
 
 
+def test_quality_num_entity_with_thousands_separator_kept_whole() -> None:
+    passages = [_passage("a", "信用額度上限 2,500萬，年費 4,500 元。")]
+
+    cited = postprocess("額度 1,500萬 [1]，另一張 2,500萬 [1]，年費 4,500 元 [1]。", passages)
+
+    assert [e.entity for e in cited.quality_report.unsupported_entities] == ["1,500萬"]
+
+
 def test_quality_entity_found_in_any_passage_not_flagged() -> None:
     passages = [_passage("a", "年費說明"), _passage("b", "民國115年起回饋 3.8%")]
 

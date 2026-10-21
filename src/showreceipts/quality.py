@@ -18,8 +18,8 @@ _SENTENCE_BREAK_RE = re.compile(r"(?<=[。！？])|\n+|(?<=[.!?])\s+")
 # 行首清單序號：「1. 」「1.」「2) 」「(1) 」「（1）」「3、」「- 」「* 」「+ 」；序號後緊接數字的不算（「3.8%」）。
 _ENUMERATOR_RE = re.compile(r"\s*(?:[(（]\d+[)）]\s*|\d+[.)](?!\d)\s*|\d+、|[-*+](?:\s+|$))")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
-# 「元」不算數量單位，單獨的「4,500」不是實體（Spec 104 的 Lead 裁決）。
-_NUM_RE = re.compile(r"\d+(?:\.\d+)?\s*(?:億|萬|百萬|千|%|‰)")
+# 「元」不算數量單位，單獨的「4,500」不是實體（Spec 104 的 Lead 裁決）；千分位要整串取，「1,500萬」不能只取「500萬」。
+_NUM_RE = re.compile(r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:億|萬|百萬|千|%|‰)")
 _DATE_RES = [
     re.compile(r"民國\s*\d{1,3}\s*年(?:\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?)?"),
     re.compile(r"\d{4}\s*年"),
@@ -108,8 +108,8 @@ def _pieces(text: str) -> list[Span]:
     return [(s, e) for s, e in pieces if s < e]
 
 
+# `text[start:end]` 開頭是一串 marker（中間只隔空白）時，回傳最後一個 marker 的結尾。
 def _marker_run_end(text: str, start: int, end: int, marker_end: dict[int, int]) -> int | None:
-    """`text[start:end]` 開頭是一串 marker（中間只隔空白）時，回傳最後一個 marker 的結尾。"""
     run_end = None
     pos = start
     while pos in marker_end:

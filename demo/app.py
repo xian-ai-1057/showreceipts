@@ -2,15 +2,16 @@
 
 啟動：`uv run --all-extras uvicorn demo.app:create_app --factory`；根路徑是 demo 頁面，API 文件頁在 `/docs`。
 預設 Generator 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`，與 CLI 相同。
+上傳的 Document 以 `{filename, data_base64}` 傳，檔名決定格式。base64 錯誤、不支援的格式、無法解碼的文字、
+缺少 extra 都是輸入問題，回 422；GeneratorError 回 502。兩者的本文都是 `{"detail": 訊息}`。
 """
 
 import base64
-import binascii
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from showreceipts import (
     CitedAnswer,
@@ -39,21 +40,10 @@ class PostprocessRequest(BaseModel):
 
 
 class DocumentPayload(BaseModel):
-    """上傳的 Document：檔名決定格式，內容以 base64 傳。"""
-
     model_config = ConfigDict(extra="forbid")
 
     filename: str
     data_base64: str
-
-    @field_validator("data_base64")
-    @classmethod
-    def _check_base64(cls, value: str) -> str:
-        try:
-            base64.b64decode(value, validate=True)
-        except binascii.Error as exc:
-            raise ValueError(f"data_base64 is not valid base64: {exc}") from None
-        return value
 
 
 class SplitRequest(BaseModel):
@@ -80,9 +70,12 @@ class AnswerRequest(BaseModel):
 
 
 def _split_document(document: DocumentPayload, *, target_chars: int = 500) -> list[Passage]:
-    """不支援的格式、無法解碼的文字、缺少 extra 都是輸入問題：回 422，本文是 `{"detail": 訊息}`。"""
     try:
-        return split((base64.b64decode(document.data_base64), document.filename), target_chars=target_chars)
+        data = base64.b64decode(document.data_base64, validate=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"data_base64 is not valid base64: {exc}") from exc
+    try:
+        return split((data, document.filename), target_chars=target_chars)
     except (ValueError, ImportError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

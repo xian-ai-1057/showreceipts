@@ -1,13 +1,15 @@
 """LangChain 範例：LangChain 產生的 0-based 答案交給 showreceipts 後處理。
 
-LangChain 的 QA 範例常以 `[0]`、`[1]` 從 0 開始替資料編號。這裡用 LangChain 的鏈產生答案，
-再以 `from_langchain` 把同一批文件轉成 Passage，經 `postprocess(..., input_marker_base=0)`
-轉成從 1 連號的 `[n]`，並刪掉對不到任何文件的編號。showreceipts 本身不需要安裝 LangChain。
+LangChain 的 QA 範例常以 `[0]`、`[1]` 從 0 開始替資料編號。這裡把 arrkb 樣本轉成 LangChain Document
+（模擬 retriever 的輸出），用 LangChain 的鏈產生答案，再以 `from_langchain` 把同一批文件轉成 Passage，
+經 `postprocess(..., input_marker_base=0)` 轉成從 1 連號的 `[n]`，並刪掉對不到任何文件的編號。
+showreceipts 本身不需要安裝 LangChain。
 
     uv run python examples/langchain_postprocess.py "切換 Pay 著刷最高回饋多少？"
 
-模型端點與 CLI 相同，讀 SHOWRECEIPTS_BASE_URL、SHOWRECEIPTS_MODEL、SHOWRECEIPTS_API_KEY（預設本機 Ollama）；
-連本機模型時把 localhost 加入 NO_PROXY。
+聊天模型由 showreceipts 的預設 Generator 充當，所以只裝 langchain-core 就能執行；實際專案換成 ChatOpenAI、
+ChatOllama 等任何 LangChain 聊天模型即可。模型端點與 CLI 相同，讀 SHOWRECEIPTS_BASE_URL、SHOWRECEIPTS_MODEL、
+SHOWRECEIPTS_API_KEY（預設本機 Ollama）；連本機模型時把 localhost 加入 NO_PROXY。
 """
 
 import argparse
@@ -43,7 +45,6 @@ PROMPT = ChatPromptTemplate.from_messages(
 
 
 def build_documents(sample_path: Path) -> list[Document]:
-    """把 arrkb 樣本轉成 LangChain Document，模擬 LangChain retriever 的輸出。"""
     records = json.loads(Path(sample_path).read_text(encoding="utf-8"))["data"]
     return [
         Document(
@@ -86,8 +87,6 @@ def main(argv: list[str] | None = None, *, llm: Runnable[Any, Any] | None = None
 
 
 def _chat_model_from_env() -> Runnable[Any, str]:
-    """以 showreceipts 的預設 Generator（讀 SHOWRECEIPTS_* 環境變數，預設本機 Ollama）充當聊天模型，
-    只裝 langchain-core 就能執行；實際專案換成 ChatOpenAI、ChatOllama 等任何 LangChain 聊天模型即可。"""
     generator = default_generator()
 
     def chat(prompt: ChatPromptValue) -> str:

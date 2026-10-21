@@ -70,7 +70,7 @@ uv sync --all-extras    # 核心 + 全部 extras + 開發工具（pytest、langc
 |---|---|---|
 | `pdf` | `pypdf` | `split` 讀 PDF |
 | `docx` | `python-docx` | `split` 讀 DOCX |
-| `demo` | `fastapi`、`uvicorn`、`python-multipart` | demo 後端 |
+| `demo` | `fastapi`、`uvicorn` | demo 後端 |
 
 ```bash
 uv sync --extra pdf --extra demo              # 只裝需要的 extra
@@ -168,7 +168,7 @@ from showreceipts.adapters import from_arrkb, from_langchain
 
 passages = [Passage(id="doc-7#3", text="正卡每卡每年 NT$4,500。", source="權益手冊.pdf", locator="第 3 頁")]
 passages = from_arrkb(arrkb_response)          # {"data": [...]}、多筆 list 或單筆都可以
-passages = from_langchain(docs)                # 任何有 page_content 與 metadata 的物件，或 (doc, score)
+passages = from_langchain(docs)                # 任何有 page_content 與 metadata 的物件
 ```
 
 Passage JSON 是一個清單，每段的欄位如下：
@@ -182,7 +182,7 @@ Passage JSON 是一個清單，每段的欄位如下：
 | `score` | 選填，只用來顯示 |
 | `metadata` | 選填，原樣保留 |
 
-不允許其他欄位。`from_langchain` 可用 `id_key`、`source_key` 指定讀哪個 metadata 欄位，用 `locator_fn` 自訂 Locator。文件沒有 id 時，會以 `source + text` 的雜湊產生穩定 ID，並記一則 warning。
+不允許其他欄位。`from_langchain` 可用 `id_key`、`source_key` 指定讀哪個 metadata 欄位（`metadata[id_key]` 優先，沒有時才用文件的 `.id`），用 `locator_fn` 自訂 Locator；預設 Locator 取 `page_label`，沒有時取 `page`，只給 0-based `page` 的 loader 請傳 `locator_fn`。文件沒有 id 時，會以 `source + text` 的雜湊產生穩定 ID，並記一則 warning。
 
 ### 3. 只做後處理：LangChain 範例
 

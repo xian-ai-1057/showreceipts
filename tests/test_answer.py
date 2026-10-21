@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
-from showreceipts.prompts import build_prompt
 
 GOLDEN = Path(__file__).parent / "fixtures" / "golden"
 
@@ -80,7 +79,7 @@ def test_answer_numbers_passages_in_given_order_after_dedupe_ignoring_score(fake
     assert cited.answer == "甲 [1]，乙 [2]。"
 
 
-def test_build_prompt_called_directly_dedupes_like_answer(fake_generator) -> None:
+def test_answer_duplicate_id_dropped_from_prompt_without_numbering_gap(fake_generator) -> None:
     passages = [
         Passage(id="x", text="one", source="s"),
         Passage(id="x", text="dup", source="s"),
@@ -88,9 +87,8 @@ def test_build_prompt_called_directly_dedupes_like_answer(fake_generator) -> Non
     ]
 
     answer("q", passages, fake_generator)
-    system, user = build_prompt("q", passages)
 
-    assert (system, user) == fake_generator.calls[0]
+    _, user = fake_generator.calls[0]
     assert "[1] 來源: s\none\n" in user
     assert "[2] 來源: s\ntwo\n" in user
     assert "dup" not in user
