@@ -15,6 +15,13 @@ SAMPLE = json.loads((ROOT / "data" / "sample_reranked.json").read_text(encoding=
 GOLDEN_PASSAGE = json.loads((ROOT / "tests" / "fixtures" / "golden" / "passage_arrkb.json").read_text(encoding="utf-8"))
 
 
+def _record(context_id: str, *, score: float | None = None, **fields: object) -> dict[str, object]:
+    record: dict[str, object] = {"context_id": context_id, "content": f"text of {context_id}", "filename": "doc.md"}
+    if score is not None:
+        record["kwargs"] = {"relevance_score": score}
+    return record | fields
+
+
 def test_adapters_arrkb_sample_first_item_matches_golden_passage() -> None:
     passages = from_arrkb(SAMPLE)
 
@@ -72,13 +79,6 @@ def test_adapters_arrkb_page_becomes_locator(page: object, locator: str) -> None
 
     assert passage.locator == locator
     assert passage.metadata["page"] == page
-
-
-def _record(context_id: str, *, score: float | None = None, **fields: object) -> dict[str, object]:
-    record: dict[str, object] = {"context_id": context_id, "content": f"text of {context_id}", "filename": "doc.md"}
-    if score is not None:
-        record["kwargs"] = {"relevance_score": score}
-    return record | fields
 
 
 def test_adapters_langchain_duck_typed_object_converted() -> None:

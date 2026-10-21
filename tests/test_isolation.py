@@ -119,7 +119,7 @@ def test_isolation_frameworks_blocked_core_and_adapters_still_run() -> None:
     sample = PACKAGE_DIR.parents[1] / "data" / "sample_reranked.json"
 
     result = subprocess.run(
-        [sys.executable, "-c", _BLOCKED_RUN, str(sample)], capture_output=True, text=True, encoding="utf-8"
+        [sys.executable, "-c", _BLOCKED_RUN, str(sample)], capture_output=True, encoding="utf-8", check=False
     )
 
     assert result.returncode == 0, result.stderr

@@ -26,7 +26,7 @@ def _arrkb_passage(i: int, item: Mapping[str, Any]) -> Passage:
     return Passage(
         id=str(item["context_id"]),
         text=item["content"],
-        source=item.get("filename") or "?",
+        source=_first_present(item.get("filename")) or "?",
         locator=_page_locator(item.get("page")),
         score=(item.get("kwargs") or {}).get("relevance_score"),
         metadata={k: v for k, v in item.items() if k not in ("context_id", "content", "filename")},
@@ -45,7 +45,10 @@ def from_langchain(
     source_key: str = "source",
     locator_fn: Callable[[dict[str, Any]], str] | None = None,
 ) -> list[Passage]:
-    """缺 id 的文件以 Source 與內文的雜湊產生穩定 ID，整批只記一則 warning。"""
+    """以 duck typing 讀取有 `page_content`（str）與 `metadata`（Mapping）的物件，或 `(物件, score)`。
+
+    缺 id 的文件以 Source 與內文的雜湊產生穩定 ID，整批只記一則 warning。
+    """
     passages = []
     hashed = []
     for i, item in enumerate(docs):
