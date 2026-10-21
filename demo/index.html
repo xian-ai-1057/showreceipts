@@ -14,6 +14,8 @@
     --accent-soft: #ddf4ff;
     --error: #cf222e;
     --error-soft: #ffebe9;
+    --uncited-bg: #fff8c5;
+    --low-support: #9a6700;
   }
   * { box-sizing: border-box; }
   body {
@@ -86,6 +88,14 @@
     font-weight: 600;
   }
   .marker.active { background: var(--accent); color: #fff; }
+  .uncited { background: var(--uncited-bg); }
+  .low-support {
+    text-decoration: underline dashed var(--low-support);
+    text-decoration-thickness: 1px;
+    text-underline-offset: .3em;
+  }
+  .missing-entity { color: var(--error); font-weight: 600; }
+  .quality { margin: .5rem 0 0; font-size: 13px; color: var(--muted); }
   .citations { margin: .75rem 0 0; padding-left: 0; list-style: none; font-size: 14px; }
   .citations li { margin: .15rem 0; }
   details { margin-top: .75rem; }
@@ -126,7 +136,7 @@
 <body>
 <header>
   <h1>showreceipts demo</h1>
-  <p>上傳一份 Document 直接提問（走 split → select → answer），或貼上外部檢索系統的 Passage JSON 提問；點答案中的 [n] 對照原文。三個端點也能在 <a href="/docs">/docs</a> 直接試打。</p>
+  <p>上傳一份 Document 直接提問（走 split → select → answer），或貼上外部檢索系統的 Passage JSON 提問；點答案中的 [n] 對照原文，Quality Report 的可疑標示直接畫在答案上。三個端點也能在 <a href="/docs">/docs</a> 直接試打。</p>
 </header>
 
 <main>
@@ -345,6 +355,7 @@ function addTurn(question, cited) {
   const turn = el("article", { class: "turn" },
     el("h3", {}, `Q${turnCount}：${question}`),
     renderAnswer(cited),
+    renderQualitySummary(cited.quality_report),
     renderCitationList(cited),
     renderComparison(cited),
   );
@@ -352,20 +363,99 @@ function addTurn(question, cited) {
   $("history").hidden = false;
 }
 
+// 答案逐句包成 span，再把 [n] 按鈕與「來源裡找不到」的實體嵌進去；Quality Report 標示見 qualityRanges。
 function renderAnswer(cited) {
   const box = el("div", { class: "answer" });
   const text = cited.answer;
-  let pos = 0;
+  const { sentences, entities } = qualityRanges(cited);
+  const tokens = [...entities];
   for (const match of text.matchAll(ANSWER_TOKEN_RE)) {
     const n = match.groups.n === undefined ? null : Number(match.groups.n);
     const citation = cited.citations.find((c) => c.n === n);
     if (!citation) continue;
-    box.append(text.slice(pos, match.index), markerButton(match[0], citation));
-    pos = match.index + match[0].length;
+    tokens.push({ start: match.index, end: match.index + match[0].length, render: () => markerButton(match[0], citation) });
   }
-  box.append(text.slice(pos));
+  tokens.sort((a, b) => a.start - b.start);
+  // text[from:to) 轉成節點；只放完全落在範圍內的 token，跨界的照純文字顯示。
+  const inline = (from, to) => {
+    const nodes = [];
+    let pos = from;
+    for (const token of tokens) {
+      if (token.start < pos || token.end > to) continue;
+      nodes.push(text.slice(pos, token.start), token.render());
+      pos = token.end;
+    }
+    nodes.push(text.slice(pos, to));
+    return nodes;
+  };
+  let pos = 0;
+  for (const sentence of sentences) {
+    box.append(...inline(pos, sentence.start), sentenceSpan(sentence, inline(sentence.start, sentence.end)));
+    pos = sentence.end;
+  }
+  box.append(...inline(pos, text.length));
   if (text === "") box.append(el("span", { class: "hint" }, "（刪除 Fabricated Marker 後答案是空字串）"));
   return box;
+}
+
+// Quality Report 的 sentence 是答案的逐字子字串，依序用 indexOf 定位；
+// uncited_sentences 以 sentence_index 對回同一份句切分。實體則標出答案中每一處出現的位置。
+function qualityRanges(cited) {
+  const report = cited.quality_report;
+  if (!report) return { sentences: [], entities: [] };
+  const text = cited.answer;
+  const uncited = new Map(report.uncited_sentences.map((item) => [item.sentence_index, item]));
+  const sentences = [];
+  let from = 0;
+  report.sentence_supports.forEach((support, index) => {
+    const start = text.indexOf(support.sentence, from);
+    if (start < 0) return;
+    from = start + support.sentence.length;
+    sentences.push({ start, end: from, support, uncited: uncited.get(index) });
+  });
+  const found = [];
+  for (const flag of report.unsupported_entities) {
+    for (let at = text.indexOf(flag.entity); at >= 0; at = text.indexOf(flag.entity, at + flag.entity.length)) {
+      found.push({ start: at, end: at + flag.entity.length, flag });
+    }
+  }
+  found.sort((a, b) => a.start - b.start || b.end - a.end);
+  const entities = [];
+  for (const item of found) {
+    if (entities.length && item.start < entities.at(-1).end) continue;
+    entities.push({ ...item, render: () => el("span", {
+      class: "missing-entity",
+      title: `來源裡找不到這個${item.flag.kind === "date" ? "日期" : "數字"}`,
+    }, item.flag.entity) });
+  }
+  return { sentences, entities };
+}
+
+function sentenceSpan({ support, uncited }, children) {
+  const classes = ["sentence"];
+  const notes = [`3-gram 重疊 ${support.overlap_score}${support.best_match_passage_id ? `，最接近 ${support.best_match_passage_id}` : ""}`];
+  if (!support.supported) {
+    classes.push("low-support");
+    notes.push("支持度低（未達 0.15，或沒有引用）");
+  }
+  if (uncited) {
+    classes.push("uncited");
+    notes.push(`含數字但沒有標來源：${uncited.numbers.join("、")}`);
+  }
+  return el("span", { class: classes.join(" "), title: notes.join("\n") }, ...children);
+}
+
+function renderQualitySummary(report) {
+  if (!report) return el("p", { class: "quality" }, "這個答案沒有 Quality Report。");
+  const total = report.sentence_supports.length;
+  const supported = report.sentence_supports.filter((s) => s.supported).length;
+  return el("p", { class: "quality" },
+    `Quality Report（字面重疊訊號，不代表答案正確）：${supported}/${total} 句達支持度門檻，quality_score ${report.quality_score.toFixed(2)}。`,
+    el("br"),
+    el("span", { class: "uncited" }, "底色"), `：含數字但未標來源（${report.uncited_sentences.length} 句）　`,
+    el("span", { class: "low-support" }, "虛線"), `：支持度低（${total - supported} 句）　`,
+    el("span", { class: "missing-entity" }, "紅字"), `：來源裡找不到的數字或日期（${report.unsupported_entities.length} 個）`,
+  );
 }
 
 function markerButton(label, citation) {
