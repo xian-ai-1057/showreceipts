@@ -6,6 +6,7 @@ docs/adr/ 與 GitHub issue #9。
 """
 
 from .config import DEFAULT_NO_ANSWER_REPLY, ShowReceiptsConfig
+from .generators import Generator, GeneratorError, OpenAICompatGenerator
 from .models import (
     Citation,
     CitedAnswer,
@@ -16,8 +17,19 @@ from .models import (
     SentenceSupport,
     UncitedSentence,
 )
+from .pipeline import answer, postprocess
+from .selector import Selector, select
+from .splitter import split
 
 __all__ = [
+    "answer",
+    "postprocess",
+    "split",
+    "select",
+    "Selector",
+    "Generator",
+    "OpenAICompatGenerator",
+    "GeneratorError",
     "Passage",
     "Citation",
     "CitedAnswer",

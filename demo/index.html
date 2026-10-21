@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>showreceipts demo</title>
+<style>
+  :root {
+    --text: #1f2328;
+    --muted: #656d76;
+    --line: #d0d7de;
+    --panel: #f6f8fa;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --error: #cf222e;
+    --error-soft: #ffebe9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1rem;
+    color: var(--text);
+    background: #fff;
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+  header { max-width: 1280px; margin: 0 auto 1rem; }
+  header h1 { margin: 0; font-size: 1.4rem; }
+  header p { margin: .25rem 0 0; color: var(--muted); }
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 38%);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  fieldset { margin: 0 0 .75rem; padding: .75rem; border: 1px solid var(--line); border-radius: 6px; }
+  legend { font-weight: 600; padding: 0 .25rem; }
+  textarea, input, button { font: inherit; }
+  textarea, input[type="text"] {
+    width: 100%;
+    padding: .5rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+  label { display: block; font-weight: 600; margin-bottom: .25rem; }
+  .row { display: flex; gap: .5rem; margin-top: .5rem; }
+  .row input { flex: 1; }
+  button {
+    padding: .4rem .9rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+    cursor: pointer;
+  }
+  button[type="submit"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .6; cursor: progress; }
+  .small { font-size: 13px; padding: .2rem .6rem; margin-top: .5rem; }
+  .modes label { display: inline-flex; align-items: center; gap: .3rem; margin-right: 1.25rem; font-weight: normal; }
+  #document-info { margin: .5rem 0 0; }
+  .split-preview { margin: .5rem 0 0; padding-left: 1.5rem; font-size: 13px; }
+  .split-preview li { overflow-wrap: anywhere; }
+  #error {
+    margin: .75rem 0 0;
+    padding: .5rem .75rem;
+    border: 1px solid var(--error);
+    border-radius: 6px;
+    background: var(--error-soft);
+    color: var(--error);
+    white-space: pre-wrap;
+  }
+  #status { margin: .5rem 0 0; color: var(--muted); }
+  #history h2, aside h2 { font-size: 1.1rem; margin: 1.25rem 0 .5rem; }
+  aside h2 { margin-top: 0; }
+  .hint { color: var(--muted); }
+  .turn { border: 1px solid var(--line); border-radius: 6px; padding: .75rem 1rem; margin-bottom: 1rem; }
+  .turn h3 { margin: 0 0 .5rem; font-size: 1rem; }
+  .answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .marker {
+    padding: 0 .15rem;
+    border: none;
+    border-radius: 3px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .marker.active { background: var(--accent); color: #fff; }
+  .citations { margin: .75rem 0 0; padding-left: 0; list-style: none; font-size: 14px; }
+  .citations li { margin: .15rem 0; }
+  details { margin-top: .75rem; }
+  summary { cursor: pointer; color: var(--accent); }
+  .columns { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  figure { margin: .5rem 0 0; }
+  figcaption, details h4 { font-size: 13px; font-weight: 600; margin: .5rem 0 .25rem; }
+  pre {
+    margin: 0;
+    padding: .5rem;
+    background: var(--panel);
+    border-radius: 6px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+  .fabricated code { color: var(--error); }
+  aside {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
+    padding: .75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+  }
+  aside h3 { margin: 0 0 .5rem; font-size: 1rem; overflow-wrap: anywhere; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: .1rem .75rem; margin: 0 0 .75rem; font-size: 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  @media (max-width: 800px) {
+    main, .columns { grid-template-columns: 1fr; }
+    aside { position: static; max-height: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>showreceipts demo</h1>
+  <p>上傳一份 Document 直接提問（走 split → select → answer），或貼上外部檢索系統的 Passage JSON 提問；點答案中的 [n] 對照原文。三個端點也能在 <a href="/docs">/docs</a> 直接試打。</p>
+</header>
+
+<main>
+  <section>
+    <form id="ask-form">
+      <fieldset class="modes">
+        <legend>Passage 來源</legend>
+        <label><input type="radio" name="mode" value="upload" checked> 上傳 Document</label>
+        <label><input type="radio" name="mode" value="paste"> 貼上 Passage JSON</label>
+      </fieldset>
+      <fieldset id="upload-mode">
+        <legend>上傳 Document</legend>
+        <input type="file" id="document-file" accept=".md,.txt,.pdf,.docx" aria-label="選擇 Document 檔案">
+        <p id="document-info" class="hint"></p>
+        <button type="button" id="load-richart-md" class="small">改用範例 richart.md</button>
+        <button type="button" id="preview-split" class="small">預覽切段</button>
+        <ol id="split-preview" class="split-preview" hidden></ol>
+      </fieldset>
+      <fieldset id="paste-mode" hidden>
+        <legend>Passage JSON</legend>
+        <textarea id="passages-json" rows="14" spellcheck="false" aria-label="Passage JSON"></textarea>
+        <button type="button" id="load-sample" class="small">重新載入 Richart 樣本</button>
+      </fieldset>
+      <label for="question">問題</label>
+      <div class="row">
+        <input type="text" id="question" required placeholder="例：Richart 卡的年費是多少？">
+        <button type="submit" id="submit">提問</button>
+      </div>
+      <p id="status" hidden>等待 Generator 回覆…</p>
+      <p id="error" role="alert" hidden></p>
+    </form>
+
+    <div id="history" hidden>
+      <h2>本次問答</h2>
+      <p class="hint">只保留在這個頁面裡，重新整理就清空。</p>
+      <div id="turns"></div>
+    </div>
+  </section>
+
+  <aside id="sidebar" aria-live="polite">
+    <h2>引用原文</h2>
+    <div id="passage-view"><p class="hint">點答案中的 [n]，這裡會顯示該 Passage 的原文、Source 與 Locator。</p></div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+const SAMPLE_URL = "/samples/richart_passages.json";
+const SAMPLE_DOCUMENT_URL = "/samples/richart.md";
+const $ = (id) => document.getElementById(id);
+let turnCount = 0;
+let currentDocument = null;  // { name, blob, sample }：上傳模式送出的 Document
+
+// 和 markers.py 一樣，fenced code、inline code、純網址裡的 [n] 不是 Citation Marker（顯示用的近似判定）。
+// 豁免區以外的 [n] 都是後處理寫出的引用，n 對應 citations 裡的顯示編號。
+const ANSWER_TOKEN_RE = new RegExp([
+  /^[ \t]*(?<fence>`{3,}(?=[^`\n]*$)|~{3,})[^]*?(?:^[ \t]*\k<fence>[`~]*[ \t\r]*$|(?![^]))/.source,
+  /(?<!`)(?<ticks>`+)(?!`)(?:(?!\n[ \t\r]*\n)[^])+?(?<!`)\k<ticks>(?!`)/.source,
+  /https?:\/\/(?:[!-~]|[^\s\p{P}])*/.source,
+  /\[(?<n>\d+)\]/.source,
+].join("|"), "gmu");
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+  node.append(...children);  // 字串一律當純文字放入，答案與 Passage 內容不會被當成 HTML
+  return node;
+}
+
+function showError(message) {
+  $("error").textContent = message;
+  $("error").hidden = false;
+}
+
+async function loadSample() {
+  try {
+    const response = await fetch(SAMPLE_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    $("passages-json").value = await response.text();
+  } catch (error) {
+    showError(`無法載入 Richart 樣本：${error.message}`);
+  }
+}
+
+async function loadSampleDocument() {
+  try {
+    const response = await fetch(SAMPLE_DOCUMENT_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    $("document-file").value = "";
+    setDocument({ name: "richart.md", blob: await response.blob(), sample: true });
+  } catch (error) {
+    showError(`無法載入範例 richart.md：${error.message}`);
+  }
+}
+
+function setDocument(doc) {
+  currentDocument = doc;
+  $("document-info").textContent = doc
+    ? `目前的 Document：${doc.name}${doc.sample ? "（repo 附的範例）" : ""}，${doc.blob.size.toLocaleString()} bytes`
+    : "尚未選擇 Document。支援 .md、.txt、.pdf、.docx。";
+  $("split-preview").hidden = true;
+}
+
+function currentMode() {
+  return document.querySelector('input[name="mode"]:checked').value;
+}
+
+function switchMode() {
+  $("upload-mode").hidden = currentMode() !== "upload";
+  $("paste-mode").hidden = currentMode() !== "paste";
+  $("error").hidden = true;
+}
+
+// HTTP 端點全部收 JSON，Document 以 base64 放在 data_base64。
+async function documentPayload({ name, blob }) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+  return { filename: name, data_base64: dataUrl.slice(dataUrl.indexOf(",") + 1) };
+}
+
+// 提問來源：回傳 /answer 請求中 question 以外的欄位（document 或 passages 擇一）。
+async function readSource() {
+  if (currentMode() === "upload") {
+    if (!currentDocument) throw new Error("請先選擇要上傳的 Document。");
+    return { document: await documentPayload(currentDocument) };
+  }
+  try {
+    return { passages: JSON.parse($("passages-json").value) };
+  } catch (error) {
+    throw new Error(`Passage JSON 格式錯誤：${error.message}`);
+  }
+}
+
+async function previewSplit() {
+  $("error").hidden = true;
+  if (!currentDocument) {
+    showError("請先選擇要上傳的 Document。");
+    return;
+  }
+  try {
+    const response = await fetch("/split", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ document: await documentPayload(currentDocument) }),
+    });
+    if (!response.ok) throw new Error(await errorMessage(response));
+    const passages = await response.json();
+    $("split-preview").replaceChildren(...passages.map((p) => el("li", {},
+      `${p.locator || "（無 Locator）"} · ${p.text.length} 字 · ${p.id}`,
+    )));
+    $("split-preview").hidden = false;
+  } catch (error) {
+    showError(error instanceof TypeError ? `無法連到 demo 後端：${error.message}` : error.message);
+  }
+}
+
+async function ask(event) {
+  event.preventDefault();
+  $("error").hidden = true;
+  const question = $("question").value.trim();
+  let source;
+  try {
+    source = await readSource();
+  } catch (error) {
+    showError(error.message);
+    return;
+  }
+  setBusy(true);
+  try {
+    const response = await fetch("/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, ...source }),
+    });
+    if (!response.ok) throw new Error(await errorMessage(response));
+    addTurn(question, await response.json());
+  } catch (error) {
+    showError(error instanceof TypeError ? `無法連到 demo 後端：${error.message}` : error.message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function setBusy(busy) {
+  $("submit").disabled = busy;
+  $("status").hidden = !busy;
+}
+
+async function errorMessage(response) {
+  const kind = { 422: "輸入有誤", 502: "Generator 無法使用" }[response.status] ?? "請求失敗";
+  const body = await response.text();
+  let detail = body || response.statusText;
+  try {
+    detail = formatDetail(JSON.parse(body).detail);
+  } catch {
+    // 本文不是 JSON（例如代理伺服器的錯誤頁），就顯示原文。
+  }
+  return `${kind}（HTTP ${response.status}）：${detail}`;
+}
+
+// 後端的錯誤本文都是 {detail}：FastAPI 的輸入驗證錯誤是清單，GeneratorError 是字串。
+function formatDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail.map((item) => `${(item.loc ?? []).join(".")}：${item.msg}`).join("\n");
+  }
+  return typeof detail === "string" ? detail : JSON.stringify(detail);
+}
+
+function addTurn(question, cited) {
+  turnCount += 1;
+  const turn = el("article", { class: "turn" },
+    el("h3", {}, `Q${turnCount}：${question}`),
+    renderAnswer(cited),
+    renderCitationList(cited),
+    renderComparison(cited),
+  );
+  $("turns").prepend(turn);
+  $("history").hidden = false;
+}
+
+function renderAnswer(cited) {
+  const box = el("div", { class: "answer" });
+  const text = cited.answer;
+  let pos = 0;
+  for (const match of text.matchAll(ANSWER_TOKEN_RE)) {
+    const n = match.groups.n === undefined ? null : Number(match.groups.n);
+    const citation = cited.citations.find((c) => c.n === n);
+    if (!citation) continue;
+    box.append(text.slice(pos, match.index), markerButton(match[0], citation));
+    pos = match.index + match[0].length;
+  }
+  box.append(text.slice(pos));
+  if (text === "") box.append(el("span", { class: "hint" }, "（刪除 Fabricated Marker 後答案是空字串）"));
+  return box;
+}
+
+function markerButton(label, citation) {
+  const button = el("button", { type: "button", class: "marker", title: citation.passage.source }, label);
+  button.addEventListener("click", () => showPassage(citation, button));
+  return button;
+}
+
+function renderCitationList(cited) {
+  if (cited.passages.length === 0) {
+    return el("p", { class: "hint" }, "沒有可用的 Passage，未呼叫 Generator，直接回覆 No-Answer Reply。");
+  }
+  if (cited.citations.length === 0) return el("p", { class: "hint" }, "答案沒有引用任何 Passage。");
+  return el("ul", { class: "citations" }, ...cited.citations.map((citation) => el("li", {},
+    markerButton(`[${citation.n}]`, citation),
+    ` ${citation.passage.source}${citation.passage.locator ? `（${citation.passage.locator}）` : ""}`,
+  )));
+}
+
+function renderComparison(cited) {
+  const markers = cited.fabricated_markers;
+  return el("details", {},
+    el("summary", {}, `原始答案 vs. 處理後答案（刪除的 Fabricated Marker：${markers.length} 個）`),
+    el("div", { class: "columns" },
+      el("figure", {}, el("figcaption", {}, "原始答案 raw_answer"), el("pre", {}, cited.raw_answer)),
+      el("figure", {}, el("figcaption", {}, "處理後答案 answer"), el("pre", {}, cited.answer)),
+    ),
+    el("h4", {}, "fabricated_markers"),
+    markers.length
+      ? el("ul", { class: "fabricated" }, ...markers.map((marker) => el("li", {}, el("code", {}, marker))))
+      : el("p", { class: "hint" }, "沒有被刪除的編號。"),
+  );
+}
+
+function showPassage({ n, passage }, button) {
+  document.querySelectorAll(".marker.active").forEach((node) => node.classList.remove("active"));
+  button.classList.add("active");
+  const facts = [["Source", passage.source], ["Locator", passage.locator || "（無）"], ["Passage ID", passage.id]];
+  if (passage.score !== null && passage.score !== undefined) facts.push(["Score", String(passage.score)]);
+  $("passage-view").replaceChildren(
+    el("h3", {}, `引用 [${n}]`),
+    el("dl", {}, ...facts.flatMap(([name, value]) => [el("dt", {}, name), el("dd", {}, value)])),
+    el("pre", {}, passage.text),
+  );
+  $("sidebar").scrollIntoView({ block: "nearest" });
+}
+
+$("ask-form").addEventListener("submit", ask);
+$("load-sample").addEventListener("click", loadSample);
+$("load-richart-md").addEventListener("click", loadSampleDocument);
+$("preview-split").addEventListener("click", previewSplit);
+$("document-file").addEventListener("change", (event) => {
+  const [file] = event.target.files;
+  setDocument(file ? { name: file.name, blob: file, sample: false } : null);
+});
+document.querySelectorAll('input[name="mode"]').forEach((radio) => radio.addEventListener("change", switchMode));
+setDocument(null);
+loadSampleDocument();
+loadSample();
+</script>
+</body>
+</html>
