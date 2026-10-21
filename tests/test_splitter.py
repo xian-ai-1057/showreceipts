@@ -1,5 +1,12 @@
-"""split：Document → Passage；Markdown 的 Locator 是標題路徑，純文字為空，Passage ID 由內容雜湊與段落序號組成。"""
+"""split：Document → Passage。
 
+Locator：Markdown、DOCX 是標題路徑，PDF 是「第 n 頁」，純文字為空；Passage ID 由內容雜湊與段落序號組成。
+"""
+
+import hashlib
+import io
+import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -168,3 +175,162 @@ def test_split_richart_sample_gives_several_passages_located_by_heading_path() -
     assert all(0 < len(p.text) <= 500 for p in passages)
     assert all(p.source == "richart.md" for p in passages)
     assert "三、切換刷方案 > 假日刷" in {p.locator for p in passages}
+
+
+def test_split_pdf_locator_is_page_number_and_passages_never_cross_pages() -> None:
+    passages = split(DOCS / "tiny_text.pdf")
+
+    # 兩頁加起來遠低於 500 字，仍各自成段：Locator 恆為單一頁碼。
+    assert passages == [
+        Passage(
+            id="2af4d21f6d72:0",
+            text="Annual fee\nThe primary card costs NT$4,500 per year.\nThe fee is waived after 12 purchases.",
+            source="tiny_text.pdf",
+            locator="第 1 頁",
+        ),
+        Passage(
+            id="2af4d21f6d72:1",
+            text="Rewards\nGeneral spending earns 0.3% points with no cap.\nInsurance premiums earn 1.3% points.",
+            source="tiny_text.pdf",
+            locator="第 2 頁",
+        ),
+    ]
+
+
+def test_split_pdf_page_longer_than_target_keeps_its_page_locator() -> None:
+    passages = split(DOCS / "tiny_text.pdf", target_chars=50)
+
+    assert [(p.id, p.locator, p.text) for p in passages] == [
+        ("2af4d21f6d72:0", "第 1 頁", "Annual fee"),
+        ("2af4d21f6d72:1", "第 1 頁", "The primary card costs NT$4,500 per year."),
+        ("2af4d21f6d72:2", "第 1 頁", "The fee is waived after 12 purchases."),
+        ("2af4d21f6d72:3", "第 2 頁", "Rewards"),
+        ("2af4d21f6d72:4", "第 2 頁", "General spending earns 0.3% points with no cap."),
+        ("2af4d21f6d72:5", "第 2 頁", "Insurance premiums earn 1.3% points."),
+    ]
+
+
+def test_split_scanned_pdf_without_text_raises_clear_error() -> None:
+    with pytest.raises(ValueError, match=r"tiny\.pdf has no extractable text .*scanned.*OCR is not supported"):
+        split(DOCS / "tiny.pdf")
+
+
+def test_split_pdf_without_pdf_extra_raises_with_install_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "pypdf", None)
+
+    with pytest.raises(ImportError, match=r"'pdf' extra.*uv sync --extra pdf.*pip install 'showreceipts\[pdf\]'"):
+        split(DOCS / "tiny_text.pdf")
+
+
+def test_split_pdf_that_cannot_be_parsed_raises_clear_error() -> None:
+    with pytest.raises(ValueError, match=r"broken\.pdf is not a readable PDF"):
+        split((b"not a pdf at all", "broken.pdf"))
+
+
+def _tiny_docx(*blocks: tuple[str, ...]) -> bytes:
+    """以 python-docx 產生 tiny.docx：`("h", 層級, 標題)` 是標題，`("p", 內文[, 樣式名稱])` 是段落，`("t", 列, ...)` 是表格。"""
+    import docx
+    from docx.enum.style import WD_STYLE_TYPE
+
+    document = docx.Document()
+    for kind, *args in blocks:
+        if kind == "h":
+            document.add_heading(args[1], level=args[0])
+        elif kind == "p":
+            style = args[1] if len(args) > 1 else None
+            if style and style not in [s.name for s in document.styles]:
+                document.styles.add_style(style, WD_STYLE_TYPE.PARAGRAPH)
+            document.add_paragraph(args[0], style=style)
+        else:
+            table = document.add_table(rows=0, cols=len(args[0]))
+            for row in args:
+                for cell, text in zip(table.add_row().cells, row, strict=True):
+                    cell.text = text
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _zip_without_word_document() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("notes.txt", "這不是 Word 文件")
+    return buffer.getvalue()
+
+
+def test_split_docx_locator_is_heading_path() -> None:
+    data = _tiny_docx(
+        ("p", "Richart 卡說明。"),
+        ("h", 1, "三、費用"),
+        ("p", "費用總覽。"),
+        ("h", 2, "年費"),
+        ("p", "正卡年費 NT$4,500。"),
+        ("p", ""),
+        ("p", "消費滿 12 次免年費。"),
+        ("h", 3, "附卡"),
+        ("p", "附卡免年費。"),
+        ("h", 2, "循環利率"),
+        ("p", "依信用評分。"),
+        ("h", 1, "四、回饋"),
+        ("p", "一般消費 0.3%。"),
+    )
+
+    passages = split((data, "tiny.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [
+        ("", "Richart 卡說明。"),
+        ("三、費用", "費用總覽。"),
+        ("三、費用 > 年費", "正卡年費 NT$4,500。\n\n消費滿 12 次免年費。"),
+        ("三、費用 > 年費 > 附卡", "附卡免年費。"),
+        ("三、費用 > 循環利率", "依信用評分。"),
+        ("四、回饋", "一般消費 0.3%。"),
+    ]
+    doc_hash = hashlib.sha256(data).hexdigest()[:12]
+    assert [p.id for p in passages] == [f"{doc_hash}:{i}" for i in range(6)]
+    assert {p.source for p in passages} == {"tiny.docx"}
+
+
+def test_split_docx_table_rows_kept_in_document_order_without_empty_rows() -> None:
+    data = _tiny_docx(
+        ("h", 1, "年費"),
+        ("p", "年費如下表："),
+        ("t", ("卡別", "年費"), ("正卡", "NT$4,500"), ("", ""), ("附卡", "免年費")),
+        ("t", ("", ""), ("", "")),
+        ("p", "消費滿 12 次免年費。"),
+    )
+
+    passages = split((data, "fees.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [
+        ("年費", "年費如下表：\n\n卡別 | 年費\n正卡 | NT$4,500\n附卡 | 免年費\n\n消費滿 12 次免年費。"),
+    ]
+
+
+def test_split_docx_localized_heading_style_names_count_as_headings() -> None:
+    data = _tiny_docx(
+        ("p", "三、費用", "標題 1"),
+        ("p", "年費", "标题 2"),
+        ("p", "正卡年費 NT$4,500。"),
+    )
+
+    passages = split((data, "localized.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [("三、費用 > 年費", "正卡年費 NT$4,500。")]
+
+
+def test_split_docx_without_docx_extra_raises_with_install_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    data = _tiny_docx(("p", "內文。"))
+    monkeypatch.setitem(sys.modules, "docx", None)
+
+    with pytest.raises(ImportError, match=r"'docx' extra.*uv sync --extra docx.*pip install 'showreceipts\[docx\]'"):
+        split((data, "tiny.docx"))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [b"not a docx", b"PK\x03\x04garbage", _zip_without_word_document()],
+    ids=["not-zip", "broken-zip", "zip-without-word-document"],
+)
+def test_split_docx_that_cannot_be_parsed_raises_clear_error(data: bytes) -> None:
+    with pytest.raises(ValueError, match=r"broken\.docx is not a readable DOCX"):
+        split((data, "broken.docx"))
