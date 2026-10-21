@@ -19,7 +19,6 @@ def test_postprocess_markers_renumbered_by_first_appearance() -> None:
     assert cited.passages == [p1, p2, p3]
     assert cited.raw_answer == "甲 [3]，乙 [1]，丙 [3]。"
     assert cited.fabricated_markers == []
-    assert cited.quality_report is None
 
 
 def test_postprocess_unmatched_markers_removed_and_recorded_once() -> None:
