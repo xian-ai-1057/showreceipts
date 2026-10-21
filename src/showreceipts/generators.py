@@ -91,7 +91,5 @@ def _is_retryable(err: Exception) -> bool:
     if isinstance(err, urllib.error.URLError):
         # 連不上時 reason 是 OSError；網址本身寫錯（unknown url type、no host given）時是字串，重試也沒用。
         return isinstance(err.reason, OSError)
-    if isinstance(err, http.client.InvalidURL):
-        return False
-    # 等待回應逾時拋 TimeoutError、連線被中斷拋 RemoteDisconnected，兩者都不是 URLError。
-    return isinstance(err, ConnectionError | TimeoutError | http.client.HTTPException)
+    # 連線後才中斷（RemoteDisconnected）仍算連線失敗；等待回應逾時與格式錯誤的回應不重試。
+    return isinstance(err, ConnectionError)

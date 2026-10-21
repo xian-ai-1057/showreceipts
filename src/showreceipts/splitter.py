@@ -1,6 +1,6 @@
 """Splitter：把 Document 切成帶 Locator 的 Passage。
 
-每種格式的 reader 把文字讀成 `(Locator, 內文)` 區段；同一個 chunker 再把每個區段切成約
+每種格式的 reader 把文字讀成 `(Locator, 內文)` 區段，再以同一套規則（`_pack`）把每個區段切成約
 `target_chars` 字的 Passage。Passage 不跨區段，所以 Locator 恆為單一標題路徑（Markdown、DOCX）
 或單一頁碼（PDF，每頁一個區段）。
 Passage ID 是 `sha256(Document 位元組)[:12] + ":" + 0-based 段落序號`，同一份 Document 重切得到相同 ID。
@@ -17,6 +17,7 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path, PurePath
 
+from .markers import FENCE_OPEN_RE, fence_close_re
 from .models import Passage
 
 Section = tuple[str, str]
@@ -29,7 +30,6 @@ _BOUNDARIES = (
     re.compile(r"(?<=[。！？；])|(?<=[.!?;][ \t])"),
     re.compile(r"(?<=[ \t])"),
 )
-_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 # Word 內建標題樣式；其他工具產生的 DOCX 可能用中文樣式名稱。
 _DOCX_HEADING_RE = re.compile(r"(?:Heading|標題|标题) ?([1-9])")
@@ -40,20 +40,30 @@ def split(
 ) -> list[Passage]:
     if target_chars < 1:
         raise ValueError(f"target_chars must be at least 1, got {target_chars}")
-    filename = document[1] if isinstance(document, tuple) else Path(document).name
+    if isinstance(document, tuple):
+        data, filename = document
+    else:
+        data, filename = None, Path(document).name
     reader = _READERS.get(PurePath(filename).suffix.lower())
     if reader is None:
         supported = ", ".join(_READERS)
         raise ValueError(f"unsupported document format for {filename!r}; supported: {supported}")
-    data = document[0] if isinstance(document, tuple) else Path(document).read_bytes()
+    if data is None:
+        data = Path(document).read_bytes()
     doc_hash = hashlib.sha256(data).hexdigest()[:12]
-    chunks = [(locator, chunk) for locator, body in reader(data, filename) for chunk in _chunk(body, target_chars)]
+    texts = [(locator, text) for locator, body in reader(data, filename) for text in _pack(body, target_chars)]
     if source is None:
         source = PurePath(filename).name
     return [
         Passage(id=f"{doc_hash}:{i}", text=text, source=source, locator=locator)
-        for i, (locator, text) in enumerate(chunks)
+        for i, (locator, text) in enumerate(texts)
     ]
+
+
+# PDF 的「第 n 頁」Locator，Adapter 轉換外部頁碼時共用；沒有頁碼時為空字串。
+def page_locator(page: object) -> str:
+    text = "" if page is None else str(page).strip()
+    return f"第 {text} 頁" if text else ""
 
 
 def _decode(data: bytes, filename: str) -> str:
@@ -83,12 +93,10 @@ def _read_markdown(data: bytes, filename: str) -> list[Section]:
 
 
 def _fence_after(line: str, fence: str) -> str:
-    """讀完這一行後所在 fenced code block 的開頭符號；不在 code block 裡時為空字串。"""
     if not fence:
-        opener = _FENCE_RE.match(line)
+        opener = FENCE_OPEN_RE.match(line)
         return opener.group(1) if opener else ""
-    closes = line.strip().startswith(fence) and not line.strip().strip(fence[0])
-    return "" if closes else fence
+    return "" if fence_close_re(fence).match(line) else fence
 
 
 def _read_pdf(data: bytes, filename: str) -> list[Section]:
@@ -100,7 +108,7 @@ def _read_pdf(data: bytes, filename: str) -> list[Section]:
         raise _missing_extra("PDF", "pdf") from exc
     try:
         reader = PdfReader(io.BytesIO(data))
-        pages = [(f"第 {number} 頁", page.extract_text()) for number, page in enumerate(reader.pages, 1)]
+        pages = [(page_locator(number), page.extract_text()) for number, page in enumerate(reader.pages, 1)]
     except PyPdfError as exc:
         raise ValueError(f"{filename} is not a readable PDF: {exc}") from None
     if not any(text.strip() for _, text in pages):
@@ -159,16 +167,16 @@ def _heading_path(headings: list[Block]) -> str:
     return " > ".join(title for _, title in headings if title)
 
 
-def _chunk(text: str, target_chars: int) -> list[str]:
+def _pack(text: str, target_chars: int) -> list[str]:
     """依序把切點放進同一段，直到下一塊會超過 target_chars；每塊在 `_pieces` 已經不超過上限。"""
-    chunks, current = [], ""
+    packed, current = [], ""
     for piece in _pieces(text, target_chars, level=0):
         if current and len(current) + len(piece) > target_chars:
-            chunks.append(current)
+            packed.append(current)
             current = ""
         current += piece
-    chunks.append(current)
-    return [chunk.strip() for chunk in chunks if chunk.strip()]
+    packed.append(current)
+    return [part.strip() for part in packed if part.strip()]
 
 
 def _pieces(text: str, limit: int, *, level: int) -> list[str]:

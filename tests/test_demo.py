@@ -103,6 +103,15 @@ def test_demo_split_unsupported_format_returns_422_with_message() -> None:
     assert response.json()["detail"].startswith("unsupported document format")
 
 
+def test_demo_split_invalid_base64_returns_422_with_message() -> None:
+    client = TestClient(create_app())
+
+    response = client.post("/split", json={"document": {"filename": "tiny.md", "data_base64": "不是 base64"}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("data_base64 is not valid base64")
+
+
 @pytest.mark.parametrize(
     "body",
     [

@@ -47,8 +47,9 @@ def chat_reply(content: Any) -> tuple[int, dict[str, Any]]:
 class ChatServer:
     """127.0.0.1 上的假 OpenAI 相容端點。
 
-    `responses` 依序取用：`(status, dict | bytes)`、`"drop"`（不回應直接斷線）或
-    `("delay", 秒數)`（等待後回 `chat_reply("late")`）；取完後一律回 `chat_reply("ok")`。
+    `responses` 依序取用：`(status, dict | bytes)`、`"drop"`（不回應直接斷線）、
+    `("delay", 秒數)`（等待後回 `chat_reply("late")`）或 `("raw", bytes)`（原樣寫出、不是合法的 HTTP 回應）；
+    取完後一律回 `chat_reply("ok")`。
     """
 
     base_url: str
@@ -70,11 +71,21 @@ def chat_server() -> Iterator[ChatServer]:
 
 class _ChatHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
+        try:
+            self._respond()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # 逾時與格式錯誤的測試裡，client 會在回應寫完前斷線
+
+    def _respond(self) -> None:
         state: ChatServer = self.server.state  # type: ignore[attr-defined]
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         state.requests.append({"path": self.path, "headers": dict(self.headers), "body": json.loads(body)})
         response = state.responses.pop(0) if state.responses else chat_reply("ok")
         if response == "drop":
+            self.close_connection = True
+            return
+        if response[0] == "raw":
+            self.wfile.write(response[1])
             self.close_connection = True
             return
         if response[0] == "delay":

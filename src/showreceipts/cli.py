@@ -1,4 +1,8 @@
-"""命令列入口 `showreceipts`：子指令對應 Python API 的操作，結果以 JSON 輸出到 stdout。"""
+"""命令列入口 `showreceipts`：子指令對應 Python API 的操作，結果以 JSON 輸出到 stdout。
+
+`default_generator` 是 CLI 與 demo 後端共用的預設 Generator：參數優先，其次是 `SHOWRECEIPTS_*` 環境變數，
+最後指向本機 Ollama。
+"""
 
 import argparse
 import os
@@ -33,7 +37,6 @@ def main(argv: Sequence[str] | None = None, *, generator: Generator | None = Non
 def default_generator(
     *, base_url: str | None = None, model: str | None = None, api_key: str | None = None
 ) -> OpenAICompatGenerator:
-    """CLI 與 demo 後端共用的預設 Generator：參數優先，其次是環境變數，最後指向本機 Ollama。"""
     if base_url is None:
         base_url = os.environ.get("SHOWRECEIPTS_BASE_URL", "http://localhost:11434/v1")
     if model is None:
@@ -49,10 +52,7 @@ def _split(args: argparse.Namespace) -> str:
 
 
 def _answer(args: argparse.Namespace) -> str:
-    if args.document:
-        passages = split(args.document)
-    else:
-        passages = _PASSAGE_LIST.validate_json(Path(args.passages).read_bytes())
+    passages = split(args.document) if args.document else _load_passages(args.passages)
     selected = select(args.question, passages, args.budget)
     generator = args.generator
     if generator is None:
@@ -61,10 +61,14 @@ def _answer(args: argparse.Namespace) -> str:
 
 
 def _postprocess(args: argparse.Namespace) -> str:
-    passages = _PASSAGE_LIST.validate_json(Path(args.passages).read_bytes())
+    passages = _load_passages(args.passages)
     answer_text = Path(args.answer_file).read_text(encoding="utf-8") if args.answer_file else sys.stdin.read()
     config = ShowReceiptsConfig(input_marker_base=args.input_marker_base)
     return postprocess(answer_text, passages, config=config).model_dump_json(indent=2)
+
+
+def _load_passages(path: str) -> list[Passage]:
+    return _PASSAGE_LIST.validate_json(Path(path).read_bytes())
 
 
 def _parser() -> argparse.ArgumentParser:

@@ -80,23 +80,15 @@ def test_openai_compat_connection_refused_retried_then_generator_error(sleeps) -
     assert sleeps == [0.5, 1.0]
 
 
-def test_openai_compat_timeout_raises_generator_error(chat_server, sleeps) -> None:
-    chat_server.responses = [("delay", 1.0)]
-
-    with pytest.raises(GeneratorError) as excinfo:
-        OpenAICompatGenerator(base_url=chat_server.base_url, model="m", timeout=0.05, max_retries=0)("s", "u")
-
-    assert isinstance(excinfo.value.__cause__, TimeoutError)
-    assert sleeps == []
-
-
-def test_openai_compat_timeout_retried(chat_server, sleeps) -> None:
+def test_openai_compat_read_timeout_not_retried(chat_server, sleeps) -> None:
     chat_server.responses = [("delay", 1.0), chat_reply("in time")]
 
-    reply = OpenAICompatGenerator(base_url=chat_server.base_url, model="m", timeout=0.2, max_retries=1)("s", "u")
+    with pytest.raises(GeneratorError) as excinfo:
+        OpenAICompatGenerator(base_url=chat_server.base_url, model="m", timeout=0.2)("s", "u")
 
-    assert reply == "in time"
-    assert sleeps == [0.5]
+    assert isinstance(excinfo.value.__cause__, TimeoutError)
+    assert len(chat_server.requests) == 1
+    assert sleeps == []
 
 
 @pytest.mark.parametrize(
@@ -110,6 +102,8 @@ def test_openai_compat_timeout_retried(chat_server, sleeps) -> None:
         chat_reply(None),
         chat_reply(["not", "a", "string"]),
         (200, b"[" * 100_000 + b"]" * 100_000),
+        ("raw", b"NOT HTTP\r\n\r\n"),
+        ("raw", b"HTTP/1.1 200 OK\r\nX-Long: " + b"x" * 70_000 + b"\r\n\r\n"),
     ],
 )
 def test_openai_compat_non_retryable_failure_raises_generator_error_once(chat_server, sleeps, response) -> None:
