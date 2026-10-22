@@ -1,8 +1,12 @@
 """select：總字數沒超過預算就原樣回傳；超過時以字元 bigram BM25 挑段，回傳時恢復原本順序。"""
 
+from pathlib import Path
+
 import pytest
 
-from showreceipts import Passage, select
+from showreceipts import Passage, select, split
+
+RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
 
 FEE = Passage(id="fee", text="年費每年新臺幣四千五百元整。", source="richart.md")
 INSURANCE = Passage(id="insurance", text="保費一次付清可享回饋。", source="richart.md")
@@ -28,6 +32,21 @@ def test_select_over_budget_keeps_most_relevant_in_original_order() -> None:
     selected = select("保費回饋多少？", passages, len(INSURANCE.text) + len(SWITCH.text))
 
     assert selected == [INSURANCE, SWITCH]
+
+
+def test_select_over_budget_question_matching_only_locator_scores_above_unrelated() -> None:
+    fee = Passage(id="fee", text="正卡每卡每年新臺幣四千五百元。", source="richart.md", locator="二、年費辦法")
+    design = Passage(id="design", text="卡面設計共有三款可選。", source="richart.md", locator="一、卡片介紹")
+
+    assert select("年費多少？", [design, fee], len(fee.text)) == [fee]
+
+
+def test_select_split_markdown_over_budget_keeps_section_named_by_question() -> None:
+    passages = split(RICHART_MD)
+
+    selected = select("年費多少？", passages, 200)
+
+    assert "二、年費辦法" in [p.locator for p in selected]
 
 
 def test_select_skips_passage_too_long_for_budget_and_tries_next() -> None:
@@ -64,10 +83,12 @@ def test_select_over_budget_only_first_occurrence_of_duplicate_id_competes() -> 
     assert selected == [OTHER]
 
 
-def test_select_over_budget_keeps_later_duplicates_of_chosen_id_like_unchanged_path() -> None:
-    selected = select("年費", [FIRST, OTHER, LATER_DUPLICATE], len(FIRST.text))
+def test_select_over_budget_drops_later_duplicates_and_stays_within_budget() -> None:
+    passages = [FIRST, OTHER, LATER_DUPLICATE]
 
-    assert selected == [FIRST, LATER_DUPLICATE]
+    selected = select("年費", passages, len(FIRST.text) + len(OTHER.text) - 1)
+
+    assert selected == [FIRST]
 
 
 def test_select_negative_budget_raises() -> None:
