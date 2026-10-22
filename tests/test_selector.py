@@ -47,14 +47,27 @@ def test_select_equal_scores_keep_earlier_passage_every_time() -> None:
     assert results == [twins[:2]] * 3
 
 
-def test_select_duplicate_ids_only_first_occurrence_competes() -> None:
-    first = _passage("a", "年費四千五。")
-    other = _passage("b", "保費回饋說明。")
-    later_duplicate = _passage("a", "保費回饋保費回饋。")
+FIRST = _passage("a", "年費四千五。")
+OTHER = _passage("b", "保費回饋說明。")
+LATER_DUPLICATE = _passage("a", "保費回饋保費回饋。")
 
-    selected = select("保費回饋", [first, other, later_duplicate], 13)
 
-    assert selected == [first, other]
+def test_select_duplicate_id_counted_once_toward_budget_returns_passages_unchanged() -> None:
+    passages = [FIRST, OTHER, LATER_DUPLICATE]
+
+    assert select("保費回饋", passages, len(FIRST.text) + len(OTHER.text)) == passages
+
+
+def test_select_over_budget_only_first_occurrence_of_duplicate_id_competes() -> None:
+    selected = select("保費回饋", [FIRST, OTHER, LATER_DUPLICATE], len(OTHER.text))
+
+    assert selected == [OTHER]
+
+
+def test_select_over_budget_keeps_later_duplicates_of_chosen_id_like_unchanged_path() -> None:
+    selected = select("年費", [FIRST, OTHER, LATER_DUPLICATE], len(FIRST.text))
+
+    assert selected == [FIRST, LATER_DUPLICATE]
 
 
 def test_select_negative_budget_raises() -> None:

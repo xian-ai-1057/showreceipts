@@ -13,6 +13,7 @@ from showreceipts.adapters import from_arrkb, from_langchain
 ROOT = Path(__file__).parent.parent
 SAMPLE = json.loads((ROOT / "data" / "sample_reranked.json").read_text(encoding="utf-8"))
 GOLDEN_PASSAGE = json.loads((ROOT / "tests" / "fixtures" / "golden" / "passage_arrkb.json").read_text(encoding="utf-8"))
+RICHART_PASSAGES = json.loads((ROOT / "data" / "richart_passages.json").read_text(encoding="utf-8"))
 
 
 def _record(context_id: str, *, score: float | None = None, **fields: object) -> dict[str, object]:
@@ -26,6 +27,12 @@ def test_adapters_arrkb_sample_first_item_matches_golden_passage() -> None:
     passages = from_arrkb(SAMPLE)
 
     assert passages[0].model_dump(mode="json") == GOLDEN_PASSAGE
+
+
+def test_adapters_arrkb_sample_equals_demo_richart_passages() -> None:
+    passages = from_arrkb(SAMPLE)
+
+    assert [p.model_dump(mode="json") for p in passages] == RICHART_PASSAGES
 
 
 def test_adapters_arrkb_envelope_list_and_single_record_accepted() -> None:
@@ -106,10 +113,16 @@ def test_adapters_langchain_id_and_source_keys_read_from_metadata() -> None:
     assert (passage.id, passage.source) == ("465150", "a.docx")
 
 
-def test_adapters_langchain_object_id_wins_over_metadata_id() -> None:
-    doc = SimpleNamespace(id="obj", page_content="內文", metadata={"id": "meta"})
+def test_adapters_langchain_metadata_id_key_wins_over_document_id() -> None:
+    doc = Document(id="vec-uuid", page_content="內文", metadata={"chunk_id": "C-1"})
 
-    assert from_langchain([doc])[0].id == "obj"
+    assert from_langchain([doc], id_key="chunk_id")[0].id == "C-1"
+
+
+def test_adapters_langchain_document_id_used_when_metadata_lacks_id_key() -> None:
+    doc = Document(id="vec-uuid", page_content="內文", metadata={"source": "card.pdf"})
+
+    assert from_langchain([doc], id_key="chunk_id")[0].id == "vec-uuid"
 
 
 def test_adapters_langchain_missing_id_hashes_source_and_text_with_one_warning(
@@ -133,21 +146,18 @@ def test_adapters_langchain_missing_id_hashes_source_and_text_with_one_warning(
     assert "[0, 2]" in warnings[0].getMessage()
 
 
+def test_adapters_langchain_page_label_preferred_over_zero_based_page() -> None:
+    doc = Document(id="d1", page_content="內文", metadata={"source": "card.pdf", "page": 0, "page_label": "1"})
+
+    assert from_langchain([doc])[0].locator == "第 1 頁"
+
+
 def test_adapters_langchain_locator_fn_overrides_page_locator() -> None:
     doc = SimpleNamespace(id="d1", page_content="內文", metadata={"page": 0, "section": "三、年費"})
 
     passage = from_langchain([doc], locator_fn=lambda m: f"第 {m['page'] + 1} 頁 · {m['section']}")[0]
 
     assert passage.locator == "第 1 頁 · 三、年費"
-
-
-def test_adapters_langchain_score_pairs_set_score_and_keep_order() -> None:
-    low = SimpleNamespace(id="low", page_content="a", metadata={})
-    high = SimpleNamespace(id="high", page_content="b", metadata={})
-
-    passages = from_langchain([(low, 0.25), [high, 0.75]])
-
-    assert [(p.id, p.score) for p in passages] == [("low", 0.25), ("high", 0.75)]
 
 
 @pytest.mark.parametrize(
@@ -159,6 +169,7 @@ def test_adapters_langchain_score_pairs_set_score_and_keep_order() -> None:
         SimpleNamespace(page_content=None, metadata={}),
         SimpleNamespace(page_content="內文", metadata=[("page", 1)]),
         ("not a document", 0.5),
+        (SimpleNamespace(id="d", page_content="內文", metadata={}), 0.5),
     ],
 )
 def test_adapters_langchain_non_document_raises_type_error(bad: object) -> None:
@@ -175,7 +186,7 @@ def test_adapters_langchain_real_document_matches_duck_typed_object() -> None:
     real_without_id = Document(page_content="回饋 0.3%", metadata=metadata)
     duck_without_id = SimpleNamespace(page_content="回饋 0.3%", metadata=metadata)
 
-    converted = from_langchain([(real, 0.5), real_without_id])
+    converted = from_langchain([real, real_without_id])
 
-    assert converted == from_langchain([(duck, 0.5), duck_without_id])
-    assert [(p.id, p.score) for p in converted] == [("d1", 0.5), ("bd8c4ff744f5", None)]
+    assert converted == from_langchain([duck, duck_without_id])
+    assert [p.id for p in converted] == ["d1", "bd8c4ff744f5"]

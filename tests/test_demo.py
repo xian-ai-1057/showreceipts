@@ -1,7 +1,9 @@
 """Demo HTTP 包裝層：每個端點的輸出與直接呼叫 Python API 完全相同；根路徑提供 demo 頁面與它預填的 Richart 樣本。"""
 
 import base64
+import io
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -21,6 +23,7 @@ ANSWER = "x [2] y [0] z [3] w [9]。"
 ARRKB_SAMPLE = Path(__file__).parents[1] / "data" / "sample_reranked.json"
 TINY_MD = Path(__file__).parent / "fixtures" / "docs" / "tiny.md"
 RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+DOCS = TINY_MD.parent
 
 
 def _document(data: bytes, filename: str) -> dict[str, str]:
@@ -98,6 +101,15 @@ def test_demo_split_unsupported_format_returns_422_with_message() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"].startswith("unsupported document format")
+
+
+def test_demo_split_invalid_base64_returns_422_with_message() -> None:
+    client = TestClient(create_app())
+
+    response = client.post("/split", json={"document": {"filename": "tiny.md", "data_base64": "不是 base64"}})
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("data_base64 is not valid base64")
 
 
 @pytest.mark.parametrize(
@@ -195,3 +207,50 @@ def test_demo_richart_markdown_sample_uploaded_by_page_answers_like_python_api(f
     passages = select("繳保費可以拿到多少回饋？", split(RICHART_MD))
     assert response.status_code == 200
     assert response.json() == answer("繳保費可以拿到多少回饋？", passages, fake_generator).model_dump(mode="json")
+
+
+def _tiny_docx() -> bytes:
+    import docx
+
+    document = docx.Document()
+    document.add_heading("年費", level=1)
+    document.add_paragraph("正卡年費 NT$4,500。")
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("filename", "read"), [("tiny_text.pdf", (DOCS / "tiny_text.pdf").read_bytes), ("tiny.docx", _tiny_docx)]
+)
+def test_demo_split_pdf_and_docx_uploads_match_python_api(filename: str, read) -> None:
+    client = TestClient(create_app())
+    data = read()
+
+    response = client.post("/split", json={"document": _document(data, filename)})
+
+    assert response.status_code == 200
+    assert response.json() == [p.model_dump(mode="json") for p in split((data, filename))]
+
+
+@pytest.mark.parametrize(
+    ("filename", "blocked", "detail"),
+    [
+        ("tiny.pdf", None, "tiny.pdf has no extractable text"),
+        ("tiny_text.pdf", "pypdf", "reading PDF needs the optional 'pdf' extra: uv sync --extra pdf"),
+    ],
+    ids=["scanned-pdf", "missing-pdf-extra"],
+)
+def test_demo_answer_unreadable_pdf_returns_422_without_calling_generator(
+    fake_generator, monkeypatch: pytest.MonkeyPatch, filename: str, blocked: str | None, detail: str
+) -> None:
+    client = TestClient(create_app(generator=fake_generator))
+    if blocked:
+        monkeypatch.setitem(sys.modules, blocked, None)
+    document = _document((DOCS / filename).read_bytes(), filename)
+
+    response = client.post("/answer", json={"question": "年費多少？", "document": document})
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith(detail)
+    assert fake_generator.calls == []

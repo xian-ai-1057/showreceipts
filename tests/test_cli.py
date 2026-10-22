@@ -2,6 +2,7 @@
 
 import io
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -18,6 +19,7 @@ PASSAGES = [
 ]
 ANSWER = "x [2] y [0] z [3] w [9]。"
 TINY_MD = Path(__file__).parent / "fixtures" / "docs" / "tiny.md"
+DOCS = TINY_MD.parent
 
 
 @pytest.mark.parametrize("answer_from", ["stdin", "file"])
@@ -87,6 +89,32 @@ def test_cli_split_unsupported_format_exits_nonzero_with_message(
     assert code == 1
     assert captured.out == ""
     assert captured.err.startswith("showreceipts: unsupported document format")
+
+
+@pytest.mark.parametrize(
+    ("filename", "blocked", "message"),
+    [
+        ("tiny.pdf", None, "tiny.pdf has no extractable text"),
+        ("tiny_text.pdf", "pypdf", "reading PDF needs the optional 'pdf' extra: uv sync --extra pdf"),
+    ],
+    ids=["scanned-pdf", "missing-pdf-extra"],
+)
+def test_cli_split_unreadable_pdf_exits_nonzero_with_message(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    filename: str,
+    blocked: str | None,
+    message: str,
+) -> None:
+    if blocked:
+        monkeypatch.setitem(sys.modules, blocked, None)
+
+    code = main(["split", str(DOCS / filename)])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err.startswith(f"showreceipts: {message}")
 
 
 def test_cli_answer_flags_override_env_for_default_generator(

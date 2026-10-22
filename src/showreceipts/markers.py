@@ -1,8 +1,9 @@
 """Citation Marker 處理：把 marker 群組正規化成逐一的 `[n]`，依首次出現順序重編號，刪除 Fabricated Marker。
 
-對外只有 `resolve(text, numbering)`，由 pipeline 呼叫。fenced code block、inline code、純網址是
-豁免區，區內的方括號數字不計入、不刪除、不改號。豁免區只在原始答案上判定；刪除 marker 後再判定
-結果可能不同，所以處理後答案中的 marker 位置要由 `resolve` 算出，不要重掃處理後的答案。
+對外只有 `resolve(text, numbering)`，由 pipeline 呼叫；fenced code 的判定（`FENCE_OPEN_RE`、
+`fence_close_re`）splitter 也共用。fenced code block、inline code、純網址是豁免區，區內的方括號數字
+不計入、不刪除、不改號。豁免區只在原始答案上判定；刪除 marker 後再判定結果可能不同，所以處理後答案中的
+marker 位置由 `resolve` 一併回傳（`marker_spans`），不要重掃處理後的答案。
 私用區字元 U+E000–U+E002 是內部暫代符號，假設輸入不含（同 Spec 106）。
 """
 
@@ -22,20 +23,22 @@ _RANGE_RE = re.compile(r"(\d+)[ \t]*[-–~～][ \t]*(\d+)")
 _MAX_DIGITS = 9
 _SPACES = " \t"
 _PUNCTUATION = frozenset("，。、；：！？）」』,.;:!?)")
-# 依 CommonMark：反引號 fence 那一行不能再有反引號；inline code 由等長的反引號串收尾，
-# 可跨行但不跨空行（段落邊界）。
-_FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}(?=[^`\n]*$)|~{3,})", re.M)
+# CommonMark：反引號 fence 那一行不能再有反引號。縮排不限，寧可多豁免。
+FENCE_OPEN_RE = re.compile(r"^[ \t]*(`{3,}(?=[^`\n]*$)|~{3,})", re.M)
+# inline code 由等長的反引號串收尾，可跨行但不跨空行（段落邊界）。
 _NOT_BLANK_LINE = r"(?!\n[ \t\r]*\n)."
 _INLINE_CODE_RE = re.compile(rf"(?<!`)(`+)(?!`)(?:{_NOT_BLANK_LINE})+?(?<!`)\1(?!`)", re.S)
 _URL_START_RE = re.compile(r"https?://")
 # 私用區字元：改寫後的 marker 以 _OPEN/_CLOSE 暫代方括號，被刪的群組先換成 _DELETED。
 _OPEN, _CLOSE, _DELETED = "\ue000", "\ue001", "\ue002"
+_WRITTEN_RE = re.compile(f"{_OPEN}\\d+{_CLOSE}")
 
 
 class Resolved(NamedTuple):
     answer: str
     cited: list[Passage]
     fabricated: list[str]
+    marker_spans: list[tuple[int, int]]
 
 
 def resolve(text: str, numbering: Mapping[int, Passage]) -> Resolved:
@@ -43,6 +46,7 @@ def resolve(text: str, numbering: Mapping[int, Passage]) -> Resolved:
 
     `cited[i]` 是顯示編號 `i + 1` 對應的 Passage。含 Fabricated Marker 的群組以原字串記入
     `fabricated`；整組對不到時從答案刪除。豁免區原樣保留，只改寫豁免區之間的文字。
+    `marker_spans` 是改寫後每個 `[n]` 在答案中的位置，依序排列。
     """
     renumberer = _Renumberer(numbering)
     pieces: list[str] = []
@@ -51,7 +55,11 @@ def resolve(text: str, numbering: Mapping[int, Passage]) -> Resolved:
         pieces += [renumberer.rewrite(text[pos:start]), text[start:end]]
         pos = end
     pieces.append(renumberer.rewrite(text[pos:]))
-    return Resolved("".join(pieces), renumberer.cited, list(renumberer.fabricated))
+    written = "".join(pieces)
+    # 暫代符號與方括號都是單一字元，換回方括號不會移動位置。
+    spans = [m.span() for m in _WRITTEN_RE.finditer(written)]
+    answer = written.replace(_OPEN, "[").replace(_CLOSE, "]")
+    return Resolved(answer, renumberer.cited, list(renumberer.fabricated), spans)
 
 
 def _exempt_spans(text: str) -> list[tuple[int, int]]:
@@ -70,13 +78,15 @@ def _gaps(spans: list[tuple[int, int]], length: int) -> list[tuple[int, int]]:
     return list(zip(edges[::2], edges[1::2]))
 
 
+def fence_close_re(fence: str) -> re.Pattern[str]:
+    return re.compile(rf"^[ \t]*{fence[0]}{{{len(fence)},}}[ \t\r]*$", re.M)
+
+
 def _fenced_code(text: str) -> list[tuple[int, int]]:
     blocks = []
     end = 0
-    while opening := _FENCE_OPEN_RE.search(text, end):
-        fence = opening[1]
-        closing_re = re.compile(rf"^[ \t]*{fence[0]}{{{len(fence)},}}[ \t\r]*$", re.M)
-        closing = closing_re.search(text, opening.end())
+    while opening := FENCE_OPEN_RE.search(text, end):
+        closing = fence_close_re(opening[1]).search(text, opening.end())
         end = closing.end() if closing else len(text)
         blocks.append((opening.start(), end))
     return blocks
@@ -115,7 +125,7 @@ class _Renumberer:
         while spliced := _GROUP_RE.search(text):
             self.fabricated.setdefault(spliced[0])
             text = _remove_deleted(text[: spliced.start()] + _DELETED + text[spliced.end() :])
-        return text.replace(_OPEN, "[").replace(_CLOSE, "]")
+        return text
 
     def _replace_group(self, m: re.Match[str]) -> str:
         members, has_fabricated = _parse_group(m[1], self.numbering)

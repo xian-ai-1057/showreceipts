@@ -4,37 +4,57 @@
 
 ## What this is
 
-不綁定任何 RAG 框架的引用層，一次處理一輪問答。依 [issue #9](https://github.com/xian-ai-1057/showreceipts/issues/9)（唯一的 spec）重寫中，拆成 ticket #11–#20，依 GitHub 上的 blocking 關係開工。
+不綁定任何 RAG 框架的引用層，一次處理一輪問答。v1 依 [issue #9](https://github.com/xian-ai-1057/showreceipts/issues/9)（唯一的 spec）重寫，拆成 ticket #11–#20。#9 末尾的「開跑前裁決（2026-10-20）」優先於它上方的內文與 Spec 106。
 
-對外三個操作：`split`（Document → Passage）、`answer`（問題 + Passage → Cited Answer）、`postprocess`（外部答案 + Passage → Cited Answer）；Python API、CLI、demo HTTP 端點一一對應，輸入輸出是同一套 JSON。
+對外三個操作：`split`（Document → Passage）、`answer`（問題 + Passage → Cited Answer）、`postprocess`（外部答案 + Passage → Cited Answer）。Python API、CLI、demo HTTP 端點一一對應，輸入輸出是同一套 JSON（`models.py` 的模型）。使用說明與架構圖見 README。
 
-## 結構
+## 架構
 
-檔名已定案（2026-10-20，見 #9「開跑前裁決」）；尚未建立的檔案由對應 ticket 新增，不要另取名字。
+```
+split(Document) ─┐
+Adapter(外部結果) ┴→ Passage 清單 → select → answer: prompts → Generator → _finalize → Cited Answer
+                                   外部答案 → postprocess ─────────────────→ _finalize
+_finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）→ Citation → quality.build_quality_report
+```
 
-| 位置 | 內容 | ticket |
-|---|---|---|
-| `src/showreceipts/models.py` | 資料模型——**唯一的介面契約，鎖定** | v1-01 |
-| `src/showreceipts/config.py` | `ShowReceiptsConfig`——同屬鎖定的契約 | v1-01 |
-| `src/showreceipts/passages.py` | Passage 去重（重複 ID 只留第一個） | v1-02 |
-| `src/showreceipts/markers.py` | Citation Marker 解析、正規化、重編號、刪除 Fabricated Marker | v1-02、v1-05 |
-| `src/showreceipts/pipeline.py` | `answer`、`postprocess` 與兩者共用的 `_finalize` | v1-02、v1-03 |
-| `src/showreceipts/prompts.py` | 預設 prompt 與模板組裝 | v1-03 |
-| `src/showreceipts/generators.py` | `Generator` 型別、`OpenAICompatGenerator`、`GeneratorError` | v1-03 |
-| `src/showreceipts/quality.py` | Quality Report | v1-07 |
-| `src/showreceipts/adapters.py` | `from_arrkb`、`from_langchain` | v1-06 |
-| `src/showreceipts/splitter.py` | `split`，含 Markdown／純文字／PDF／DOCX 讀取 | v1-08、v1-09 |
-| `src/showreceipts/selector.py` | `select`（字元 bigram BM25） | v1-08 |
-| `src/showreceipts/cli.py` | `main(argv=None, *, generator=None) -> int`；console script `showreceipts` | v1-02 |
-| `demo/app.py` | FastAPI `create_app(generator=None)`；請求模型也放這裡 | v1-02 |
-| `demo/index.html` | 單一 HTML 前端 | v1-04 |
-| `examples/langchain_postprocess.py` | LangChain 範例腳本 | v1-06 |
-| `data/sample_reranked.json` | arrkb 樣本 | — |
-| `data/richart_passages.json`、`data/richart.md` | Richart 範例（貼上模式、上傳模式） | v1-04、v1-08 |
-| `tests/conftest.py` | `fake_generator` fixture；離線測試的端點固定指向關閉的 port | — |
-| `tests/fixtures/golden/` | golden fixtures | — |
-| `tests/fixtures/docs/` | `tiny.md`、`tiny.txt`、`tiny_text.pdf`（兩頁文字）；`tiny.pdf` 是兩張空白頁，當掃描型 PDF 的負面樣本 | — |
-| `specs/archive/` | Tier 2 時期的 Spec 100–106，只供參考 | — |
+不容易從程式碼一眼看出的不變式：
+
+- **`answer` 從不自己選段**。select 由呼叫端明確呼叫：`cli._answer` 與 demo 的 `/answer` 在 document 和 passages 兩條路徑都先 select 再 answer。
+- **編號**：`answer` 先去重（`passages.dedupe`），再依給定順序編 1..M。`postprocess` 以原始清單位置（含重複）加上 `input_marker_base` 對應編號，重複者收斂到第一次出現的 Passage。兩個入口只有在「ID 不重複且 base=1」時結果相同（裁決 8）。從不依 `score` 重排。
+- **豁免區只在原始答案上判定**（fenced code、inline code、純網址）。`markers.resolve` 一併回傳處理後答案中的 `marker_spans`，`quality.py` 用它，不重掃處理後的答案。
+- **Quality Report 的 `sentence` 是答案的逐字子字串**；`demo/index.html` 依序用 `indexOf` 定位句子，以 `sentence_index` 對回 Uncited Sentence。改句切分時兩邊要一起看。
+- **Quality Report 只回報**：建構時拋例外就記 warning、`quality_report=None`，答案照常回傳。
+- **Splitter**：每種格式的 reader 把檔案讀成 `(Locator, 內文)` 區段，再由同一套切段邏輯切成 Passage，Passage 不跨區段（PDF 一頁一個區段）。Passage ID 是 `sha256(位元組)[:12]:序號`。`pypdf`、`docx` 只在 reader 函式內 lazy import。缺 extra 拋 `ImportError`（訊息附安裝指令）；不支援或讀不了的檔案拋 `ValueError`。
+- **錯誤對應**：CLI 接住 `OSError`、`ValueError`、`ImportError`、`GeneratorError`，訊息寫到 stderr、exit 1。demo 的 `GeneratorError` 回 502；輸入驗證、split 的 `ValueError`／`ImportError` 回 422；本文都是 `{"detail": ...}`。呼叫端自己的 Generator 拋的例外原樣往上拋。
+- **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`，CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
+- **demo 前端的 `ANSWER_TOKEN_RE` 是 `markers.py` 豁免規則的近似複本**。改豁免規則時同步改 `index.html`。前端一律以文字節點放入答案與 Passage（`el()`），不用 `innerHTML`。
+- **頂層 `__all__`** 只放四個操作與資料型別。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
+- `data/richart_passages.json` 必須等於 `from_arrkb(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。arrkb 欄位對應改了就用 adapter 重新產生這個檔案。
+
+## 模組地圖
+
+| 位置 | 內容 |
+|---|---|
+| `src/showreceipts/models.py` | 資料模型——**唯一的介面契約，鎖定** |
+| `src/showreceipts/config.py` | `ShowReceiptsConfig`（frozen）——同屬鎖定的契約 |
+| `src/showreceipts/pipeline.py` | `answer`、`postprocess` 與兩者共用的 `_finalize` |
+| `src/showreceipts/passages.py` | `dedupe`：重複 ID 只留第一個 |
+| `src/showreceipts/markers.py` | `resolve`：marker 群組解析、正規化、重編號、刪除 Fabricated Marker、豁免區 |
+| `src/showreceipts/prompts.py` | 預設 prompt、`build_prompt`、模板單趟替換 |
+| `src/showreceipts/generators.py` | `Generator` 型別、`OpenAICompatGenerator`（stdlib HTTP、重試）、`GeneratorError` |
+| `src/showreceipts/quality.py` | `build_quality_report`：句切分、3-gram 支持度、NUM／DATE 實體、Uncited Sentence |
+| `src/showreceipts/selector.py` | `Selector` 型別、`select`（字元 bigram BM25，超過預算才挑） |
+| `src/showreceipts/splitter.py` | `split`：Markdown／純文字／PDF／DOCX reader 與共用的切段邏輯 |
+| `src/showreceipts/adapters.py` | `from_arrkb`、`from_langchain`（duck typing，不 import LangChain） |
+| `src/showreceipts/cli.py` | `main(argv=None, *, generator=None) -> int`、`default_generator`；console script `showreceipts` |
+| `demo/app.py` | FastAPI `create_app(generator=None)`；HTTP 請求模型（不屬於契約）也在這裡 |
+| `demo/index.html` | 單一 HTML 前端，原生 JS／CSS，無 build |
+| `examples/langchain_postprocess.py` | LangChain 0-based 答案 → `postprocess(input_marker_base=0)` |
+| `data/` | `sample_reranked.json`（arrkb 樣本）、`richart_passages.json`（貼上模式預填）、`richart.md`（上傳模式範例） |
+| `docs/uat-v1.md` | v1 UAT 紀錄（真模型部分待 Lead 執行，以及假 Generator 的模擬檢查） |
+| `specs/archive/` | Tier 2 時期的 Spec 100–106，只供參考 |
+
+新功能先找現有模組放；只有放不進去、又能讓架構更好畫時才新增檔案。
 
 ## 規則
 
@@ -53,6 +73,14 @@
 ## 測試
 
 - `uv sync --all-extras` 後跑 `uv run --all-extras pytest -q`；全部離線，模型一律用假 Generator，不打真 Ollama（需要真模型的測試標 `requires_ollama`，預設不執行，`-m requires_ollama` 才跑）
+- 測試切面依 #9 的 Testing Decisions：
+  - **主切面**：公開 API（`answer`、`postprocess`、`split`、`select`、Adapters）加上 `fake_generator` fixture，比對輸出的 JSON。
+  - **包裝層**：`test_cli.py`、`test_demo.py` 只驗證每個操作經包裝後的 JSON 等於直接呼叫 Python API 的結果，不在這層重測行為。
+  - **網路**：只有 `test_generators.py`，用 `chat_server` fixture 在 127.0.0.1 起假端點。
+  - **結構**：`test_isolation.py`。
+  - **demo 前端**：沒有自動化測試，以手動 UAT 驗收，記在 `docs/uat-v1.md`。
+- `conftest.py` 的 autouse fixture 把 `SHOWRECEIPTS_BASE_URL` 指向關閉的 port，並設 `NO_PROXY=*`；不小心用到預設 Generator 的測試會很快失敗，不會打到真模型或 proxy
+- golden fixtures 在 `tests/fixtures/golden/`，空白依 #9 裁決 6（例如 `0.3%。`，不是 Spec 106 的 `0.3% 。`）
 - 測「沒裝 extra」的情境時用 `monkeypatch.setitem(sys.modules, "pypdf", None)` 模擬，不用 `importorskip`
 - 只測外部行為：呼叫公開函式、比對輸出 JSON，不測內部函式
 - 命名：`test_<feature>_<scenario>_<expected>`
