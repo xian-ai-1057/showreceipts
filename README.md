@@ -88,13 +88,14 @@ pip install -e ".[pdf,docx,demo]"             # 不用 uv 時
 | `SHOWRECEIPTS_BASE_URL` | `http://localhost:11434/v1`（本機 Ollama） | `--base-url` |
 | `SHOWRECEIPTS_MODEL` | `qwen3.5:4b-mlx` | `--model` |
 | `SHOWRECEIPTS_API_KEY` | `ollama` | `--api-key` |
+| `SHOWRECEIPTS_TEMPERATURE` | `0`；設成 `default` 時不送 temperature，用模型自己的預設值 | — |
 
 ```bash
 cp .env.example .env              # 填值；.env 已被 gitignore
 uv run --env-file .env showreceipts answer -q "Richart 卡正卡年費多少？" data/richart.md
 ```
 
-呼叫採 temperature 0、不串流（non-streaming），逾時 600 秒。連線失敗、408、409、429 或 ≥500 時最多重試 2 次（間隔 0.5 秒、1 秒），失敗一律包成 `GeneratorError`。
+呼叫預設採 temperature 0、不串流（non-streaming），逾時 600 秒。連線失敗、408、409、429 或 ≥500 時最多重試 2 次（間隔 0.5 秒、1 秒），失敗一律包成 `GeneratorError`。只接受預設 temperature 的模型（例如 OpenAI 的 `gpt-6-luna`，傳 0 會回 400）請設 `SHOWRECEIPTS_TEMPERATURE=default`；這時答案不保證每次相同。
 
 ### 連本機模型：設定 NO_PROXY
 

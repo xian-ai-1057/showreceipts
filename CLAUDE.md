@@ -26,7 +26,7 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 - **Quality Report 只回報**：建構時拋例外就記 warning、`quality_report=None`，答案照常回傳。
 - **Splitter**：每種格式的 reader 把檔案讀成 `(Locator, 內文)` 區段，再由同一套切段邏輯切成 Passage，Passage 不跨區段（PDF 一頁一個區段）。Passage ID 是 `sha256(位元組)[:12]:序號`。`pypdf`、`docx` 只在 reader 函式內 lazy import。缺 extra 拋 `ImportError`（訊息附安裝指令）；不支援或讀不了的檔案拋 `ValueError`。
 - **錯誤對應**：CLI 接住 `OSError`、`ValueError`、`ImportError`、`GeneratorError`，訊息寫到 stderr、exit 1。demo 的 `GeneratorError` 回 502；輸入驗證、split 的 `ValueError`／`ImportError` 回 422；本文都是 `{"detail": ...}`。呼叫端自己的 Generator 拋的例外原樣往上拋。
-- **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`，CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
+- **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`、`SHOWRECEIPTS_TEMPERATURE`（`default` 表示不送 temperature），CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
 - **demo 前端的 `ANSWER_TOKEN_RE` 是 `markers.py` 豁免規則的近似複本**。改豁免規則時同步改 `index.html`。前端一律以文字節點放入答案與 Passage（`el()`），不用 `innerHTML`。
 - **頂層 `__all__`** 只放四個操作與資料型別。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
 - `data/richart_passages.json` 必須等於 `from_arrkb(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。arrkb 欄位對應改了就用 adapter 重新產生這個檔案。

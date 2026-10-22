@@ -34,6 +34,7 @@ def _offline_generator_endpoint(request: pytest.FixtureRequest, monkeypatch: pyt
     monkeypatch.setenv("SHOWRECEIPTS_BASE_URL", CLOSED_ENDPOINT)
     monkeypatch.delenv("SHOWRECEIPTS_MODEL", raising=False)
     monkeypatch.delenv("SHOWRECEIPTS_API_KEY", raising=False)
+    monkeypatch.delenv("SHOWRECEIPTS_TEMPERATURE", raising=False)
     # urllib 會讀 HTTP(S)_PROXY；離線測試的請求一律直連、不送進 proxy。小寫的 no_proxy 優先，兩者都設。
     for name in ("NO_PROXY", "no_proxy"):
         monkeypatch.setenv(name, "*")

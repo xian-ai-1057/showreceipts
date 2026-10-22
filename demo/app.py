@@ -1,7 +1,7 @@
 """Demo 後端：HTTP 端點與 Python API 一一對應，輸入輸出是同一套 JSON。
 
 啟動：`uv run --all-extras uvicorn demo.app:create_app --factory`；根路徑是 demo 頁面，API 文件頁在 `/docs`。
-預設 Generator 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`，與 CLI 相同。
+預設 Generator 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`、`SHOWRECEIPTS_TEMPERATURE`，與 CLI 相同。
 上傳的 Document 以 `{filename, data_base64}` 傳，檔名決定格式。base64 錯誤、不支援的格式、無法解碼的文字、
 缺少 extra 都是輸入問題，回 422；GeneratorError 回 502。兩者的本文都是 `{"detail": 訊息}`。
 """

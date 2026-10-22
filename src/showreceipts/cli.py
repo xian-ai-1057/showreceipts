@@ -1,7 +1,7 @@
 """命令列入口 `showreceipts`：子指令對應 Python API 的操作，結果以 JSON 輸出到 stdout。
 
 `default_generator` 是 CLI 與 demo 後端共用的預設 Generator：參數優先，其次是 `SHOWRECEIPTS_*` 環境變數，
-最後指向本機 Ollama。
+最後指向本機 Ollama。`SHOWRECEIPTS_TEMPERATURE` 沒設定時為 0，設成 `default` 時不送 temperature。
 """
 
 import argparse
@@ -43,7 +43,19 @@ def default_generator(
         model = os.environ.get("SHOWRECEIPTS_MODEL", "qwen3.5:4b-mlx")
     if api_key is None:
         api_key = os.environ.get("SHOWRECEIPTS_API_KEY", "ollama")
-    return OpenAICompatGenerator(base_url=base_url, model=model, api_key=api_key)
+    return OpenAICompatGenerator(base_url=base_url, model=model, api_key=api_key, temperature=_env_temperature())
+
+
+def _env_temperature() -> float | None:
+    value = os.environ.get("SHOWRECEIPTS_TEMPERATURE")
+    if value is None:
+        return 0.0
+    if value.strip() == "default":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f"SHOWRECEIPTS_TEMPERATURE must be a number or 'default', got {value!r}") from None
 
 
 def _split(args: argparse.Namespace) -> str:
