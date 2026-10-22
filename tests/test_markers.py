@@ -6,6 +6,7 @@ Passage 編號 k 指給定清單中的第 k 個（1-based），與 base 無關�
 重複 ID 的例 19、20、23 另成一表，例 20 經由 answer。
 """
 
+import itertools
 import time
 from pathlib import Path
 
@@ -113,6 +114,8 @@ DELETION = [
     ("run-after-deletion-before-punctuation", "甲[9]  。", 3, 1, "甲。", [], ["[9]"]),
     ("kept-marker-then-run-before-punctuation", "甲 [1] [9] 。", 3, 1, "甲 [1]。", [1], ["[9]"]),
     ("nested-splice", "甲 [[[9]1]2] 乙", 3, 1, "甲 乙", [], ["[9]", "[1]", "[2]"]),
+    ("private-use-chars-in-input-kept", "姓名：王\ue000明 [1]，甲 \ue001[2]\ue002 乙 [9]。", 3, 1,
+     "姓名：王\ue000明 [1]，甲 \ue001[2]\ue002 乙。", [1, 2], ["[9]"]),
 ]
 
 
@@ -131,8 +134,21 @@ EXEMPTION = [
     ("42", "[1](http://x) 甲", 3, 1, "[1](http://x) 甲", [1], []),
     ("url-ends-at-fullwidth-punctuation", "見 https://x.com/a，[2] 與 http://y[9]", 3, 1,
      "見 https://x.com/a，[1] 與 http://y[9]", [2], []),
-    ("url-ends-at-newline", "見 https://x.com/[9]\n甲 [2]", 3, 1, "見 https://x.com/[9]\n甲 [1]", [2], []),
-    ("group-straddling-url-end", "見 https://x.com/a[2，3] 甲", 3, 1, "見 https://x.com/a[2，3] 甲", [], []),
+    ("url-ends-at-chinese-quote", "見“https://x.com”[2] 乙", 3, 1, "見“https://x.com”[1] 乙", [2], []),
+    ("url-ends-at-ellipsis", "見 https://x.com…[2]", 3, 1, "見 https://x.com…[1]", [2], []),
+    ("url-ends-at-em-dash", "見 https://x.com—[2]", 3, 1, "見 https://x.com—[1]", [2], []),
+    ("url-ends-at-fullwidth-tilde", "https://x.com/～[2] 乙", 3, 1, "https://x.com/～[1] 乙", [2], []),
+    ("url-continues-past-western-punctuation", "見 https://x.org/A–B·C•D[2] 甲 [1]", 3, 1,
+     "見 https://x.org/A–B·C•D[2] 甲 [1]", [1], []),
+    ("url-ends-at-newline","見 https://x.com/[9]\n甲 [2]", 3, 1, "見 https://x.com/[9]\n甲 [1]", [2], []),
+    ("markdown-link-url-ends-at-paren", "詳見[官網](https://x.com)[1]，另見 [2]。", 3, 1,
+     "詳見[官網](https://x.com)[1]，另見 [2]。", [1, 2], []),
+    ("markdown-link-url-keeps-balanced-parens", "見[維基](https://x.org/A_(b)/c[2])[1]", 3, 1,
+     "見[維基](https://x.org/A_(b)/c[2])[1]", [1], []),
+    ("markdown-link-url-ends-before-title", '見[官網](https://x.com/[2] "標題")[3]', 3, 1,
+     '見[官網](https://x.com/[2] "標題")[1]', [3], []),
+    ("autolink-url-ends-at-angle-bracket", "見 <https://x.com/a[2]>[3]", 3, 1, "見 <https://x.com/a[2]>[1]", [3], []),
+    ("group-straddling-url-end","見 https://x.com/a[2，3] 甲", 3, 1, "見 https://x.com/a[2，3] 甲", [], []),
     ("fenced-backticks", "說明 [2]\n```python\nx = a[1]  # [9]\n```\n結論 [1]", 3, 1,
      "說明 [1]\n```python\nx = a[1]  # [9]\n```\n結論 [2]", [2, 1], []),
     ("fenced-tildes", "~~~\na[9]\n~~~\n甲 [1]", 3, 1, "~~~\na[9]\n~~~\n甲 [1]", [1], []),
@@ -140,9 +156,24 @@ EXEMPTION = [
      "```\n    x  =  a[1]\n\tb [9]\n```\n甲。", [], ["[9]"]),
     ("fenced-longer-closing", "````\n```\na[1]\n`````\n甲 [2]", 3, 1, "````\n```\na[1]\n`````\n甲 [1]", [2], []),
     ("fenced-unclosed-to-end", "甲 [2]\n```\na[9] [1]", 3, 1, "甲 [1]\n```\na[9] [1]", [2], []),
-    ("backticks-in-info-string-not-fence", "```x``` 與 [2]", 3, 1, "```x``` 與 [1]", [2], []),
+    ("fenced-in-numbered-list-item", "1. ```bash\n   pip install a[1]\n   ```\n2. 年費 [2]。\n3. 回饋 [3]。", 3, 1,
+     "1. ```bash\n   pip install a[1]\n   ```\n2. 年費 [1]。\n3. 回饋 [2]。", [2, 3], []),
+    ("fenced-in-list-item-unindented-closing", "1. ```bash\npip install x[1]\n```\n2. 年費 [2]。", 3, 1,
+     "1. ```bash\npip install x[1]\n```\n2. 年費 [1]。", [2], []),
+    ("fenced-in-bullet-item", "- ```\n  x[1]\n  ```\n甲 [9]。", 3, 1, "- ```\n  x[1]\n  ```\n甲。", [], ["[9]"]),
+    ("fenced-in-blockquote", "> ```python\n> x = a[1]\n> ```\n> 結論 [2]", 3, 1,
+     "> ```python\n> x = a[1]\n> ```\n> 結論 [1]", [2], []),
+    ("fenced-in-blockquoted-list-item", ">  1. ~~~\n>     a[1]\n>     ~~~\n> 甲 [2]", 3, 1,
+     ">  1. ~~~\n>     a[1]\n>     ~~~\n> 甲 [1]", [2], []),
+    ("quoted-fence-line-does-not-close-unquoted-block", "```\n> ```\nx = a[1]\n```\n甲 [2]。", 3, 1,
+     "```\n> ```\nx = a[1]\n```\n甲 [1]。", [2], []),
+    ("fenced-in-blockquote-longer-closing", "> ```\n> a[1]\n> ````\n甲 [2]。", 3, 1,
+     "> ```\n> a[1]\n> ````\n甲 [1]。", [2], []),
+    ("backticks-in-info-string-not-fence","```x``` 與 [2]", 3, 1, "```x``` 與 [1]", [2], []),
     ("inline-double-backticks", "``a`[1]`` 甲 [2]", 3, 1, "``a`[1]`` 甲 [1]", [2], []),
     ("unmatched-backtick-literal", "甲 ` [2] 乙 [1]", 3, 1, "甲 ` [1] 乙 [2]", [2, 1], []),
+    ("escaped-backtick-not-inline-code", "使用 \\` 符號 [2] 與 `code` [1]", 3, 1,
+     "使用 \\` 符號 [1] 與 `code` [2]", [2, 1], []),
     ("inline-code-spans-single-newline", "甲 `a\n[1]` 乙 [2]", 3, 1, "甲 `a\n[1]` 乙 [1]", [2], []),
     ("inline-code-stops-at-blank-line", "第一段 ` 符號 [1]。\n\n第二段 `code` [2]。", 3, 1,
      "第一段 ` 符號 [1]。\n\n第二段 `code` [2]。", [1, 2], []),
@@ -167,6 +198,23 @@ def test_markers_golden_cited_answer_reproduced() -> None:
     assert result.answer == golden.answer
     assert result.citations == golden.citations
     assert result.fabricated_markers == golden.fabricated_markers
+
+
+def test_markers_answer_with_every_bmp_private_use_char_resolved() -> None:
+    private_use = "".join(map(chr, range(0xE000, 0xF900)))
+
+    result = _run(private_use + " 甲 [2]", 3, 1)
+
+    assert result.answer == private_use + " 甲 [1]"
+    assert [c.passage.id for c in result.citations] == ["P2"]
+    assert result.quality_report is not None
+
+
+def test_markers_answer_with_every_private_use_char_raises_value_error() -> None:
+    every = itertools.chain(range(0xE000, 0xF900), range(0xF0000, 0x110000))
+
+    with pytest.raises(ValueError, match="private-use"):
+        _run("".join(map(chr, every)) + " 甲 [2]", 3, 1)
 
 
 def test_markers_huge_range_not_expanded_completes_fast() -> None:

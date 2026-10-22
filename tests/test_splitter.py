@@ -144,8 +144,16 @@ def test_split_markdown_hash_lines_in_code_fence_are_not_headings() -> None:
             "# 安裝\n\n1. 步驟：\n\n     ```bash\n   # 建立環境\n     ```\n\n完成。\n",
             [("安裝", "1. 步驟：\n\n     ```bash\n   # 建立環境\n     ```\n\n完成。")],
         ),
+        (
+            "# 安裝\n\n- ```bash\n  # 建立環境\n  ```\n\n# 使用\n\n執行。\n",
+            [("安裝", "- ```bash\n  # 建立環境\n  ```"), ("使用", "執行。")],
+        ),
+        (
+            "# 安裝\n\n> ```bash\n> # 建立環境\n> ```\n\n# 使用\n\n執行。\n",
+            [("安裝", "> ```bash\n> # 建立環境\n> ```"), ("使用", "執行。")],
+        ),
     ],
-    ids=["inline-code-is-not-a-fence", "indented-fence-in-list-item"],
+    ids=["inline-code-is-not-a-fence", "indented-fence-in-list-item", "fence-after-list-marker", "fence-in-blockquote"],
 )
 def test_split_markdown_fenced_code_follows_answer_exemption_rules(document: str, sections: list) -> None:
     passages = split((document.encode(), "install.md"))

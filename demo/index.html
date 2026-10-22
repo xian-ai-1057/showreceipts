@@ -191,12 +191,13 @@ const $ = (id) => document.getElementById(id);
 let turnCount = 0;
 let currentDocument = null;  // { name, blob, sample }：上傳模式送出的 Document
 
-// 和 markers.py 一樣，fenced code、inline code、純網址裡的 [n] 不是 Citation Marker（顯示用的近似判定）。
-// 豁免區以外的 [n] 都是後處理寫出的引用，n 對應 citations 裡的顯示編號。
+// 和 markers.py 一樣，fenced code、inline code、連結網址、純網址裡的 [n] 不是 Citation Marker（顯示用的近似判定；
+// 收尾 fence 不比對引言層數）。豁免區以外的 [n] 都是後處理寫出的引用，n 對應 citations 裡的顯示編號。
 const ANSWER_TOKEN_RE = new RegExp([
-  /^[ \t]*(?<fence>`{3,}(?=[^`\n]*$)|~{3,})[^]*?(?:^[ \t]*\k<fence>[`~]*[ \t\r]*$|(?![^]))/.source,
-  /(?<!`)(?<ticks>`+)(?!`)(?:(?!\n[ \t\r]*\n)[^])+?(?<!`)\k<ticks>(?!`)/.source,
-  /https?:\/\/(?:[!-~]|[^\s\p{P}])*/.source,
+  /^[ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?<fence>`{3,}(?=[^`\n]*$)|~{3,})[^]*?(?:^[ \t]*(?:>[ \t]*)*\k<fence>[`~]*[ \t\r]*$|(?![^]))/.source,
+  /(?<![`\\])(?<ticks>`+)(?!`)(?:(?!\n[ \t\r]*\n)[^])+?(?<!`)\k<ticks>(?!`)/.source,
+  /(?<=\]\()https?:\/\/(?:[^\s()]|\([^\s()]*\))*(?=[\s)])|(?<=<)https?:\/\/[^\s<>]*(?=>)/.source,
+  /https?:\/\/(?:[!-~]|[^\s\p{P}～])*/.source,
   /\[(?<n>\d+)\]/.source,
 ].join("|"), "gmu");
 

@@ -17,7 +17,7 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path, PurePath
 
-from .markers import FENCE_OPEN_RE, fence_close_re
+from .markers import FENCE_OPEN_RE, fence_close_re, fence_quotes
 from .models import Passage
 
 Section = tuple[str, str]
@@ -81,22 +81,23 @@ def _read_text(data: bytes, filename: str) -> list[Section]:
 def _read_markdown(data: bytes, filename: str) -> list[Section]:
     """以 ATX 標題（`#`～`######`）分區段；fenced code 裡的 `#` 行不算標題。"""
     blocks: list[Block] = []
-    fence = ""
+    closing: re.Pattern[str] | None = None
     for line in _decode(data, filename).split("\n"):
-        heading = None if fence else _HEADING_RE.match(line)
+        heading = None if closing else _HEADING_RE.match(line)
         if heading is None:
-            fence = _fence_after(line, fence)
+            closing = _fence_closing_after(line, closing)
             blocks.append((0, line))
         else:
             blocks.append((len(heading.group(1)), (heading.group(2) or "").strip()))
     return _group_by_headings(blocks, joiner="\n")
 
 
-def _fence_after(line: str, fence: str) -> str:
-    if not fence:
+def _fence_closing_after(line: str, closing: re.Pattern[str] | None) -> re.Pattern[str] | None:
+    """讀完 `line` 後仍在 fenced code 裡時，回傳收尾行的 pattern。"""
+    if closing is None:
         opener = FENCE_OPEN_RE.match(line)
-        return opener.group(1) if opener else ""
-    return "" if fence_close_re(fence).match(line) else fence
+        return fence_close_re(opener[1], fence_quotes(opener)) if opener else None
+    return None if closing.match(line) else closing
 
 
 def _read_pdf(data: bytes, filename: str) -> list[Section]:
