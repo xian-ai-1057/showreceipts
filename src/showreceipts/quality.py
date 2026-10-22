@@ -7,6 +7,7 @@ NUM／DATE 實體的子字串比對，另加 Uncited Sentence。句子以答案�
 """
 
 import re
+from bisect import bisect_left
 from collections.abc import Sequence
 
 from .models import Citation, EntityFlag, EntityKind, Passage, QualityReport, SentenceSupport, UncitedSentence
@@ -17,9 +18,12 @@ NGRAM_SIZE = 3
 _SENTENCE_BREAK_RE = re.compile(r"(?<=[。！？])|\n+|(?<=[.!?])\s+")
 # 行首清單序號：「1. 」「1.」「2) 」「(1) 」「（1）」「3、」「- 」「* 」「+ 」；序號後緊接數字的不算（「3.8%」）。
 _ENUMERATOR_RE = re.compile(r"\s*(?:[(（]\d+[)）]\s*|\d+[.)](?!\d)\s*|\d+、|[-*+](?:\s+|$))")
+# 連續的單獨序號會併成一句（「2.\n3.\n4. 回饋」），檢查 Uncited Sentence 時整串去掉。
+_ENUMERATORS_RE = re.compile(f"(?:{_ENUMERATOR_RE.pattern})+")
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)*")
 # 「元」不算數量單位，單獨的「4,500」不是實體（Spec 104 的 Lead 裁決）；千分位要整串取，「1,500萬」不能只取「500萬」。
-_NUM_RE = re.compile(r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:億|萬|百萬|千|%|‰)")
+# 不從數字中間開始比對，否則一長串數字會從每個位置重試，變成平方時間。
+_NUM_RE = re.compile(r"(?<!\d)(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*(?:億|萬|百萬|千|%|‰)")
 _DATE_RES = [
     re.compile(r"民國\s*\d{1,3}\s*年(?:\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?)?"),
     re.compile(r"\d{4}\s*年"),
@@ -41,16 +45,22 @@ def build_quality_report(
     """`citations` 與 `passages` 同 Cited Answer；`marker_spans` 是答案中每個 `[n]` 的位置。"""
     sentences = _split_sentences(answer, marker_spans)
     passage_by_n = {c.n: c.passage for c in citations}
+    # 長答案會反覆引用同幾個 Passage：3-gram 每個 Passage 只算一次，marker 依位置二分取出。
+    grams_by_n: dict[int, set[str]] = {}
+    marker_starts = [s for s, _ in marker_spans]
     supports = []
     uncited = []
     for index, (start, end) in enumerate(sentences):
         sentence = answer[start:end]
-        markers = [(s, e) for s, e in marker_spans if start <= s < end]
+        markers = marker_spans[bisect_left(marker_starts, start) : bisect_left(marker_starts, end)]
         cited_ns = dict.fromkeys(int(answer[s + 1 : e - 1]) for s, e in markers)
+        for n in cited_ns:
+            if n not in grams_by_n:
+                grams_by_n[n] = _ngrams(passage_by_n[n].text)
         content = _without(answer, start, end, markers)
-        supports.append(_support(sentence, content, [passage_by_n[n] for n in cited_ns]))
+        supports.append(_support(sentence, content, [(passage_by_n[n].id, grams_by_n[n]) for n in cited_ns]))
         if not markers:
-            enumerator = _ENUMERATOR_RE.match(sentence)
+            enumerator = _ENUMERATORS_RE.match(sentence)
             numbers = _NUMBER_RE.findall(sentence, enumerator.end() if enumerator else 0)
             if numbers:
                 uncited.append(UncitedSentence(sentence=sentence, sentence_index=index, numbers=numbers))
@@ -135,14 +145,15 @@ def _without(text: str, start: int, end: int, spans: Sequence[Span]) -> str:
     return "".join(pieces).strip()
 
 
-def _support(sentence: str, content: str, cited: Sequence[Passage]) -> SentenceSupport:
+def _support(sentence: str, content: str, cited: Sequence[tuple[str, set[str]]]) -> SentenceSupport:
+    """`cited` 是句中引用的（Passage ID, Passage 的 3-gram），依引用順序。"""
     best_score, best_id = 0.0, None
     grams = _ngrams(content)
     if grams:
-        for passage in cited:
-            score = len(grams & _ngrams(passage.text)) / len(grams)
+        for passage_id, passage_grams in cited:
+            score = len(grams & passage_grams) / len(grams)
             if score > best_score:
-                best_score, best_id = score, passage.id
+                best_score, best_id = score, passage_id
     supported = best_score >= SUPPORT_THRESHOLD
     return SentenceSupport(
         sentence=sentence,

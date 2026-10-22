@@ -1,9 +1,10 @@
 """預設 Selector：Passage 總字數超過預算時，依問題挑出最相關的幾段。
 
-計分是字元 bigram 的 BM25（純 stdlib）。依分數由高到低取段，放不進剩餘預算的那段跳過、繼續試下一段；
+計分是字元 bigram 的 BM25（純 stdlib），連同 Locator 一起計分：Splitter 把標題移到 Locator，
+章節的關鍵詞常常不在內文裡。依分數由高到低取段，放不進剩餘預算的那段跳過、繼續試下一段；
 同分依原順序；回傳時恢復原本順序。預算算的是 `Passage.text` 的字數，不含 prompt 裡的來源標頭。
-重複的 Passage ID 只以第一次出現者計分與計字數，和 answer 的去重規則一致；兩條路徑回傳的都是輸入清單
-的子序列，被選中 ID 的重複項跟著保留（answer 會再去重）。
+重複的 Passage ID 只以第一次出現者計分與計字數，和 answer 的去重規則一致。沒超過預算時原樣回傳（含重複項）；
+超過時回傳去重後的子序列，結果一定不超過預算。
 """
 
 import math
@@ -27,14 +28,14 @@ def select(question: str, passages: Sequence[Passage], budget: int = 12000) -> l
     candidates = dedupe(passages)
     if sum(len(p.text) for p in candidates) <= budget:
         return list(passages)
-    scores = _bm25(_bigrams(question), [_bigrams(p.text) for p in candidates])
+    scores = _bm25(_bigrams(question), [_bigrams(f"{p.locator}\n{p.text}") for p in candidates])
     ranked = sorted(range(len(candidates)), key=lambda i: (-scores[i], i))
     chosen, used = set(), 0
     for i in ranked:
         if used + len(candidates[i].text) <= budget:
             chosen.add(candidates[i].id)
             used += len(candidates[i].text)
-    return [p for p in passages if p.id in chosen]
+    return [p for p in candidates if p.id in chosen]
 
 
 def _bigrams(text: str) -> list[str]:

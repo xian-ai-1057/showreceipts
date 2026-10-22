@@ -194,6 +194,19 @@ def test_quality_uncited_sentence_numbers_after_enumerator(sentence: str, number
     assert report.uncited_sentences == expected
 
 
+@pytest.mark.parametrize(
+    ("raw", "uncited"),
+    [
+        ("年費 4,500 元 [1]。 2. 3.", []),
+        ("年費 4,500 元 [1]。\n2.\n3.\n4. 回饋 2%", [("2.\n3.\n4. 回饋 2%", ["2"])]),
+    ],
+)
+def test_quality_run_of_lone_enumerators_not_reported_as_uncited_numbers(raw: str, uncited: list) -> None:
+    report = postprocess(raw, [FEE]).quality_report
+
+    assert [(u.sentence, u.numbers) for u in report.uncited_sentences] == uncited
+
+
 def test_quality_build_failure_logs_warning_and_answer_still_returned(caplog: pytest.LogCaptureFixture) -> None:
     # 跳過驗證建出的 Passage（text=None）讓報告建構失敗；答案與引用不受影響。
     broken = Passage.model_construct(id="a", text=None, source="doc.md", locator="", score=None, metadata={})
@@ -247,4 +260,25 @@ def test_quality_five_paragraphs_of_300_chars_under_500ms() -> None:
     elapsed = time.perf_counter() - started
 
     assert cited.quality_report is not None
+    assert elapsed < 0.5
+
+
+def test_quality_20000_digit_answer_under_500ms() -> None:
+    started = time.perf_counter()
+    cited = postprocess("1" * 20000 + " [1]", [FEE])
+    elapsed = time.perf_counter() - started
+
+    assert cited.quality_report.unsupported_entities == []
+    assert elapsed < 0.5
+
+
+def test_quality_answer_of_5000_cited_sentences_under_500ms() -> None:
+    passages = [_passage(f"p{i}", (f"第 {i} 段：年費 4,500 元，回饋 {i}.5%。" * 40)[:600]) for i in range(5)]
+    raw = "年費 4,500 元 [1][2][3][4][5]。" * 5000
+
+    started = time.perf_counter()
+    cited = postprocess(raw, passages)
+    elapsed = time.perf_counter() - started
+
+    assert len(cited.quality_report.sentence_supports) == 5000
     assert elapsed < 0.5
