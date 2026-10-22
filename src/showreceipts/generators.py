@@ -25,7 +25,10 @@ class GeneratorError(RuntimeError):
 
 
 class OpenAICompatGenerator:
-    """呼叫 `{base_url}/chat/completions` 的 Generator，例如本機 Ollama 的 OpenAI 相容端點。"""
+    """呼叫 `{base_url}/chat/completions` 的 Generator，例如本機 Ollama 的 OpenAI 相容端點。
+
+    `temperature=None` 時請求不帶 temperature，由模型用自己的預設值（有些模型只接受預設值）。
+    """
 
     def __init__(
         self,
@@ -33,7 +36,7 @@ class OpenAICompatGenerator:
         base_url: str,
         model: str,
         api_key: str = "",
-        temperature: float = 0.0,
+        temperature: float | None = 0.0,
         timeout: float = 600.0,
         max_retries: int = 2,
     ) -> None:
@@ -45,15 +48,16 @@ class OpenAICompatGenerator:
         self.max_retries = max_retries
 
     def __call__(self, system_prompt: str, user_prompt: str) -> str:
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": self.temperature,
             "stream": False,
         }
+        if self.temperature is not None:
+            body["temperature"] = self.temperature
         response = self._post(json.dumps(body).encode("utf-8"))
         try:
             content = response["choices"][0]["message"]["content"]

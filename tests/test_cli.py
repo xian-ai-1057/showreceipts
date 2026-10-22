@@ -182,3 +182,28 @@ def test_default_generator_args_override_env(monkeypatch: pytest.MonkeyPatch) ->
         "arg-model",
         "arg-key",
     )
+
+
+@pytest.mark.parametrize(("value", "expected"), [(None, 0.0), ("0.7", 0.7), ("default", None)])
+def test_default_generator_temperature_from_env(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: float | None
+) -> None:
+    if value is not None:
+        monkeypatch.setenv("SHOWRECEIPTS_TEMPERATURE", value)
+
+    assert default_generator().temperature == expected
+
+
+def test_cli_answer_invalid_temperature_env_exits_nonzero_with_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    passages_file = tmp_path / "passages.json"
+    passages_file.write_text(json.dumps([p.model_dump(mode="json") for p in PASSAGES]), encoding="utf-8")
+    monkeypatch.setenv("SHOWRECEIPTS_TEMPERATURE", "warm")
+
+    code = main(["answer", "-q", "A 是什麼？", "--passages", str(passages_file)])
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("showreceipts: SHOWRECEIPTS_TEMPERATURE")

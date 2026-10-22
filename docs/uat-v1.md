@@ -10,7 +10,7 @@ demo 前端（`demo/index.html`）沒有自動化測試，依 #9 的 Testing Dec
 
 | 部分 | 狀態 |
 |---|---|
-| [真模型 UAT](#真模型-uat) | **待 Lead 以 .env 模型執行**。v1-10 的容器裡沒有 Ollama，也沒有 Lead 提供的 `.env`。 |
+| [真模型 UAT](#真模型-uat) | 2026-10-23 以 OpenAI `gpt-6-luna` 完成，R1–R6 通過，另記兩項觀察。 |
 | [模擬檢查（假 Generator）](#模擬檢查假-generator) | 2026-10-21 完成，37/37 通過。這部分只檢查畫面機制，不檢查模型答案的品質。 |
 
 ## 真模型 UAT
@@ -22,24 +22,26 @@ cp .env.example .env                    # Lead 填入端點、模型與 API key�
 export NO_PROXY=localhost,127.0.0.1     # 連本機模型時
 uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 # 打開 http://127.0.0.1:8000/
+# 模型只接受預設 temperature 時（例如 gpt-6-luna），在 .env 加 SHOWRECEIPTS_TEMPERATURE=default
 ```
 
 **API key 不得寫進本檔、終端輸出、截圖或 issue。** 本檔只記錄模型名稱與端點類型（例如「本機 Ollama」）。
 
-- 執行日期：（待填）
-- 模型 `SHOWRECEIPTS_MODEL`：（待填）
-- 端點類型：（待填，不寫 key）
+- 執行日期：2026-10-23，分支 `claude/generator-temperature`（基底 `main` `b200171`）。
+- 模型 `SHOWRECEIPTS_MODEL`：`gpt-6-luna`，`SHOWRECEIPTS_TEMPERATURE=default`。這個模型只接受預設 temperature，送 0 會回 400，所以本分支新增這個設定。答案不保證每次相同。
+- 端點類型：OpenAI API（`https://api.openai.com/v1`）。
+- 執行者：Claude Code 以 in-app 瀏覽器操作 demo，並以 CLI 跑 R3 交叉比對。
 
 ### 檢查清單
 
 | # | 模式 | 問題 | 通過條件 | 結果 |
 |---|---|---|---|---|
-| R1 | 貼上（預填 Richart 樣本） | 切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？ | 答出 3.8% 與「LINE Pay 在超商無回饋」；每個 `[n]` 的側欄原文都支持該句 | 待 Lead 以 .env 模型執行 |
-| R2 | 貼上（預填 Richart 樣本） | 繳保費可以拿到多少回饋？切換假日刷呢？ | 答出免切換 1.3%、切換假日刷最高 2%；每個 `[n]` 的側欄原文都支持該句 | 待 Lead 以 .env 模型執行 |
-| R3 | 上傳 `data/richart.md` | Richart 卡正卡年費多少？一般消費的回饋是多少？ | 答出 NT$4,500 與 0.3%；側欄的 Locator 是標題路徑；每個 `[n]` 的側欄原文都支持該句 | 待 Lead 以 .env 模型執行 |
-| R4 | R1–R3 共同 | — | Quality Report 的底色、虛線、紅字標示與答案內容相符 | 待 Lead 以 .env 模型執行 |
-| R5 | R1–R3 共同 | — | 展開「原始答案 vs. 處理後答案」，列出的 Fabricated Marker 確實已從答案刪除；若模型沒寫錯編號，清單為空 | 待 Lead 以 .env 模型執行 |
-| R6 | R1–R3 共同 | — | 終端與畫面都沒有印出 API key | 待 Lead 以 .env 模型執行 |
+| R1 | 貼上（預填 Richart 樣本） | 切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？ | 答出 3.8% 與「LINE Pay 在超商無回饋」；每個 `[n]` 的側欄原文都支持該句 | 通過。答「最高可享 3.8%」與「在超商使用 LINE Pay 沒有加碼回饋」 |
+| R2 | 貼上（預填 Richart 樣本） | 繳保費可以拿到多少回饋？切換假日刷呢？ | 答出免切換 1.3%、切換假日刷最高 2%；每個 `[n]` 的側欄原文都支持該句 | 通過。答免切換 1.3%、切換假日刷最高 2%，另補一句不適用的保費類型 |
+| R3 | 上傳 `data/richart.md` | Richart 卡正卡年費多少？一般消費的回饋是多少？ | 答出 NT$4,500 與 0.3%；側欄的 Locator 是標題路徑；每個 `[n]` 的側欄原文都支持該句 | 通過。答 NT$4,500 與 0.3%；Locator 為 `二、年費辦法`、`四、保費與一般消費 > 一般消費 0.3%`。CLI 結果相同 |
+| R4 | R1–R3 共同 | — | Quality Report 的底色、虛線、紅字標示與答案內容相符 | 通過，見下方觀察 1。三題都是 2/2 句達門檻、quality_score 1.00；R3 的「2026 年」標紅字 |
+| R5 | R1–R3 共同 | — | 展開「原始答案 vs. 處理後答案」，列出的 Fabricated Marker 確實已從答案刪除；若模型沒寫錯編號，清單為空 | 通過。三題 Fabricated Marker 都是 0 個；R2、R3 的原始編號（`[4][2]`、`[4]`／`[11]`）正確重編成 `[1]`、`[2]` |
+| R6 | R1–R3 共同 | — | 終端與畫面都沒有印出 API key | 通過。頁面 HTML、CLI 的 stdout／stderr、uvicorn log 都不含 key |
 
 ### 查證參考
 
@@ -53,13 +55,21 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 
 ### 每個 `[n]` 的查證紀錄
 
-由 Lead 執行時填寫。每題的每個 `[n]` 各一列。
+每題的每個 `[n]` 各一列。R1、R2 的 Source 是 `20260312【信用卡】115年上半年台新Richart卡權益 .docx.txt`，Locator 都是 `第 1 頁`。
 
 | # | `[n]` | 側欄的 Source · Locator · Passage ID | 原文是否支持該句 |
 |---|---|---|---|
-| R1 | | | |
-| R2 | | | |
-| R3 | | | |
+| R1 | [1] | 第 1 頁 · `…054657` | 是：「切換【Pay 著刷】方案享最高 3.8%」 |
+| R1 | [2] | 第 1 頁 · `…054735` | 是：「（注意: LINE Pay 超商無回饋）」。答案寫「沒有加碼回饋」，比原文的「無回饋」弱一點，但不算錯 |
+| R2 | [1] | 第 1 頁 · `…054734` | 是：「保費免切換 1.3%」，以及不回饋的保費類型（「薦繳保費」是原文用字） |
+| R2 | [2] | 第 1 頁 · `…054735` | 是：「保費免切換免領券直接可享 1.3% 回饋, 但若切換假日刷, 可享最高 2% 回饋」 |
+| R3 | [1] | richart.md · 二、年費辦法 · `6b32fff5b9ee:3` | 是：「正卡每卡每年 NT$4,500」 |
+| R3 | [2] | richart.md · 四、保費與一般消費 > 一般消費 0.3% · `6b32fff5b9ee:10` | 是：「一般消費享 0.3% … 回饋無上限，不回饋專案詳注意事項」 |
+
+### 觀察
+
+1. **「2026 年」被標成來源裡找不到的日期（R3）**。原文寫的是 `2026/1/1～2026/12/31`，DATE 實體以字面子字串比對，`2026 年` 對不上。這是現行規則的已知限制，不是答案錯；要改得先決定 DATE 是否正規化。
+2. **模型答案裡的 Markdown 粗體以原樣顯示（R2）**。`gpt-6-luna` 會寫 `**1.3% 臺新 Point 回饋**`，demo 以文字節點顯示答案，不渲染 Markdown，所以畫面上看得到 `**`。
 
 ## 模擬檢查（假 Generator）
 

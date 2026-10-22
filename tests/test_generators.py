@@ -35,6 +35,12 @@ def test_openai_compat_posts_chat_completions_request_and_returns_content(chat_s
     }
 
 
+def test_openai_compat_temperature_none_omits_temperature(chat_server) -> None:
+    OpenAICompatGenerator(base_url=chat_server.base_url, model="m", temperature=None)("s", "u")
+
+    assert "temperature" not in chat_server.requests[0]["body"]
+
+
 def test_openai_compat_without_api_key_sends_no_authorization(chat_server) -> None:
     OpenAICompatGenerator(base_url=chat_server.base_url, model="m")("s", "u")
 

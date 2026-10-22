@@ -9,7 +9,7 @@ showreceipts 本身不需要安裝 LangChain。
 
 聊天模型由 showreceipts 的預設 Generator 充當，所以只裝 langchain-core 就能執行；實際專案換成 ChatOpenAI、
 ChatOllama 等任何 LangChain 聊天模型即可。模型端點與 CLI 相同，讀 SHOWRECEIPTS_BASE_URL、SHOWRECEIPTS_MODEL、
-SHOWRECEIPTS_API_KEY（預設本機 Ollama）；連本機模型時把 localhost 加入 NO_PROXY。
+SHOWRECEIPTS_API_KEY、SHOWRECEIPTS_TEMPERATURE（預設本機 Ollama）；連本機模型時把 localhost 加入 NO_PROXY。
 """
 
 import argparse
