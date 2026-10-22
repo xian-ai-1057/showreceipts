@@ -5,6 +5,7 @@ Locator：Markdown、DOCX 是標題路徑，PDF 是「第 n 頁」，純文字�
 
 import hashlib
 import io
+import re
 import sys
 import zipfile
 from pathlib import Path
@@ -15,6 +16,7 @@ from showreceipts import Passage, split
 
 DOCS = Path(__file__).parent / "fixtures" / "docs"
 RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
 def test_split_markdown_locator_is_heading_path() -> None:
@@ -250,9 +252,64 @@ def test_split_pdf_without_pdf_extra_raises_with_install_command(monkeypatch: py
         split(DOCS / "tiny_text.pdf")
 
 
-def test_split_pdf_that_cannot_be_parsed_raises_clear_error() -> None:
+def _encrypted_pdf(algorithm: str, user_password: str = "") -> bytes:
+    """以擁有者密碼加密 tiny_text.pdf（Acrobat「限制列印、複製」的做法）；不設使用者密碼時任何人都能開。"""
+    import pypdf
+
+    writer = pypdf.PdfWriter(clone_from=DOCS / "tiny_text.pdf")
+    writer.encrypt(user_password=user_password, owner_password="owner", algorithm=algorithm)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("algorithm", ["AES-128", "AES-256", "RC4-128"])
+def test_split_pdf_encrypted_with_owner_password_only_reads_like_any_pdf(algorithm: str) -> None:
+    passages = split((_encrypted_pdf(algorithm), "terms.pdf"))
+
+    assert [(p.locator, p.text) for p in passages] == [
+        ("第 1 頁", "Annual fee\nThe primary card costs NT$4,500 per year.\nThe fee is waived after 12 purchases."),
+        ("第 2 頁", "Rewards\nGeneral spending earns 0.3% points with no cap.\nInsurance premiums earn 1.3% points."),
+    ]
+
+
+def test_split_aes_pdf_without_cryptography_raises_with_install_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    data = _encrypted_pdf("AES-128")
+    # pypdf 在 import 時選定加解密套件，所以把已載入的 pypdf 一併移除，讓 split 重新 import。
+    for name in [name for name in sys.modules if name.split(".")[0] in {"pypdf", "cryptography", "Crypto"}]:
+        monkeypatch.delitem(sys.modules, name)
+    monkeypatch.setitem(sys.modules, "cryptography", None)
+    monkeypatch.setitem(sys.modules, "Crypto", None)
+
+    with pytest.raises(ImportError, match=r"'pdf' extra.*uv sync --extra pdf.*pip install 'showreceipts\[pdf\]'"):
+        split((data, "terms.pdf"))
+
+
+def _tiny_text_pdf_with(old: bytes, new: bytes) -> bytes:
+    return (DOCS / "tiny_text.pdf").read_bytes().replace(old, new)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"not a pdf at all",
+        _tiny_text_pdf_with(b"<< /Length 146 >>", b"<< /Length 146 /Filter /JBIG2Decode >>"),
+        _tiny_text_pdf_with(b"/Resources << /Font << /F1 3 0 R >> >>", b"/Resources 7"),
+    ],
+    ids=["garbage", "jbig2-text", "resources-not-a-dictionary"],
+)
+def test_split_pdf_that_cannot_be_parsed_raises_clear_error(data: bytes) -> None:
     with pytest.raises(ValueError, match=r"broken\.pdf is not a readable PDF"):
-        split((b"not a pdf at all", "broken.pdf"))
+        split((data, "broken.pdf"))
+
+
+def test_split_pdf_parse_error_has_no_memory_address() -> None:
+    data = _tiny_text_pdf_with(b"<< /Length 146 >>", b"<< /Length 5 0 R >>")
+
+    with pytest.raises(ValueError, match=r"loop\.pdf is not a readable PDF") as error:
+        split((data, "loop.pdf"))
+
+    assert re.search(r"IndirectObject\(\d+, \d+, \d+\)", str(error.value)) is None
 
 
 def _tiny_docx(*blocks: tuple[str, ...]) -> bytes:
@@ -279,11 +336,42 @@ def _tiny_docx(*blocks: tuple[str, ...]) -> bytes:
     return buffer.getvalue()
 
 
-def _zip_without_word_document() -> bytes:
+def _zip(files: dict[str, bytes]) -> bytes:
     buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("notes.txt", "這不是 Word 文件")
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
     return buffer.getvalue()
+
+
+def _zip_without_word_document() -> bytes:
+    return _zip({"notes.txt": "這不是 Word 文件".encode()})
+
+
+def _unzipped(data: bytes) -> dict[str, bytes]:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return {name: archive.read(name) for name in archive.namelist()}
+
+
+def _docx_with_document_xml(document_xml: str) -> bytes:
+    return _zip({**_unzipped(_tiny_docx()), "word/document.xml": document_xml.encode()})
+
+
+def _with_corrupt_deflate_entry(data: bytes, name: str) -> bytes:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        info = archive.getinfo(name)
+    # zip 的本地檔頭是 30 位元組，後接檔名與 extra 欄位，再來才是壓縮資料；把壓縮資料整段換成無效的 deflate。
+    header = data[info.header_offset : info.header_offset + 30]
+    start = info.header_offset + 30 + int.from_bytes(header[26:28], "little") + int.from_bytes(header[28:30], "little")
+    return data[:start] + b"\xff" * info.compress_size + data[start + info.compress_size :]
+
+
+def _docx_of_another_office_type() -> bytes:
+    files = _unzipped(_tiny_docx())
+    files["[Content_Types].xml"] = files["[Content_Types].xml"].replace(
+        b"wordprocessingml.document.main", b"spreadsheetml.sheet.main"
+    )
+    return _zip(files)
 
 
 def test_split_docx_locator_is_heading_path() -> None:
@@ -318,6 +406,25 @@ def test_split_docx_locator_is_heading_path() -> None:
     assert {p.source for p in passages} == {"tiny.docx"}
 
 
+def test_split_docx_empty_heading_paragraph_ignored() -> None:
+    data = _tiny_docx(
+        ("h", 1, "費用"),
+        ("h", 2, "年費"),
+        ("p", "正卡年費 NT$4,500。"),
+        ("h", 1, ""),
+        ("p", "附卡免年費。"),
+        ("h", 5, "細則"),
+        ("p", "以帳單日為準。"),
+    )
+
+    passages = split((data, "tiny.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [
+        ("費用 > 年費", "正卡年費 NT$4,500。\n\n附卡免年費。"),
+        ("費用 > 年費 > 細則", "以帳單日為準。"),
+    ]
+
+
 def test_split_docx_table_rows_kept_in_document_order_without_empty_rows() -> None:
     data = _tiny_docx(
         ("h", 1, "年費"),
@@ -334,6 +441,27 @@ def test_split_docx_table_rows_kept_in_document_order_without_empty_rows() -> No
     ]
 
 
+def test_split_docx_table_row_keeps_multi_paragraph_cell_on_one_line_and_merged_cell_once() -> None:
+    import docx
+
+    document = docx.Document()
+    document.add_heading("年費", 1)
+    table = document.add_table(rows=4, cols=3)
+    for row, texts in zip(table.rows, [["卡別", "年費", "備註"], ["正卡", "NT$4,500", "線上申辦"], ["附卡", "免年費", "限二張"]]):
+        for cell, text in zip(row.cells, texts):
+            cell.text = text
+    table.cell(1, 1).add_paragraph("首年免年費")
+    table.cell(3, 0).merge(table.cell(3, 2)).text = "以上金額含稅。"
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    passages = split((buffer.getvalue(), "fees.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [
+        ("年費", "卡別 | 年費 | 備註\n正卡 | NT$4,500 首年免年費 | 線上申辦\n附卡 | 免年費 | 限二張\n以上金額含稅。"),
+    ]
+
+
 def test_split_docx_localized_heading_style_names_count_as_headings() -> None:
     data = _tiny_docx(
         ("p", "三、費用", "標題 1"),
@@ -346,6 +474,21 @@ def test_split_docx_localized_heading_style_names_count_as_headings() -> None:
     assert [(p.locator, p.text) for p in passages] == [("三、費用 > 年費", "正卡年費 NT$4,500。")]
 
 
+def test_split_docx_over_50_mb_of_xml_when_unzipped_raises_clear_error() -> None:
+    data = _zip({**_unzipped(_tiny_docx(("p", "內文。"))), "customXml/item9.xml": bytes(50_000_000)})
+
+    with pytest.raises(ValueError, match=r"huge\.docx unzips to [\d,]+ bytes of XML, more than the 50,000,000-byte limit"):
+        split((data, "huge.docx"))
+
+
+def test_split_docx_with_over_50_mb_of_media_reads_like_any_docx() -> None:
+    data = _zip({**_unzipped(_tiny_docx(("p", "內文。"))), "word/media/image1.png": bytes(60_000_000)})
+
+    passages = split((data, "brochure.docx"))
+
+    assert [(p.locator, p.text) for p in passages] == [("", "內文。")]
+
+
 def test_split_docx_without_docx_extra_raises_with_install_command(monkeypatch: pytest.MonkeyPatch) -> None:
     data = _tiny_docx(("p", "內文。"))
     monkeypatch.setitem(sys.modules, "docx", None)
@@ -356,9 +499,23 @@ def test_split_docx_without_docx_extra_raises_with_install_command(monkeypatch: 
 
 @pytest.mark.parametrize(
     "data",
-    [b"not a docx", b"PK\x03\x04garbage", _zip_without_word_document()],
-    ids=["not-zip", "broken-zip", "zip-without-word-document"],
+    [
+        b"not a docx",
+        b"PK\x03\x04garbage",
+        _zip_without_word_document(),
+        _docx_with_document_xml("<broken"),
+        _with_corrupt_deflate_entry(_tiny_docx(), "word/document.xml"),
+        _docx_with_document_xml(f'<w:document xmlns:w="{W_NS}"/>'),
+        _docx_with_document_xml(f'<w:foo xmlns:w="{W_NS}"/>'),
+        _docx_of_another_office_type(),
+    ],
+    ids=[
+        "not-zip", "broken-zip", "zip-without-word-document", "broken-xml", "corrupt-deflate", "no-body",
+        "not-a-document", "another-office-type",
+    ],
 )
 def test_split_docx_that_cannot_be_parsed_raises_clear_error(data: bytes) -> None:
-    with pytest.raises(ValueError, match=r"broken\.docx is not a readable DOCX"):
+    with pytest.raises(ValueError, match=r"broken\.docx is not a readable DOCX") as error:
         split((data, "broken.docx"))
+
+    assert " at 0x" not in str(error.value)

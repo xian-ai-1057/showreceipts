@@ -15,6 +15,7 @@ import io
 import re
 import zipfile
 from collections.abc import Callable
+from typing import Any
 from pathlib import Path, PurePath
 
 from .markers import FENCE_OPEN_RE, fence_close_re, fence_quotes
@@ -33,6 +34,10 @@ _BOUNDARIES = (
 _HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 # Word 內建標題樣式；其他工具產生的 DOCX 可能用中文樣式名稱。
 _DOCX_HEADING_RE = re.compile(r"(?:Heading|標題|标题) ?([1-9])")
+_DOCX_MAX_XML_BYTES = 50_000_000
+# 例外訊息裡的 repr 位址（`<… at 0x…>`），以及 pypdf IndirectObject repr 帶的 id(reader)。
+_ADDRESS_RE = re.compile(r" at 0x[0-9a-fA-F]+")
+_INDIRECT_OBJECT_ID_RE = re.compile(r"(IndirectObject\(\d+, \d+), \d+\)")
 
 
 def split(
@@ -104,41 +109,79 @@ def _read_pdf(data: bytes, filename: str) -> list[Section]:
     """每頁一個區段，Locator 是「第 n 頁」（1-based）；沒有任何一頁抽得出文字時視為掃描型 PDF。"""
     try:
         from pypdf import PdfReader
-        from pypdf.errors import PyPdfError
+        from pypdf.errors import DependencyError
     except ImportError as exc:
         raise _missing_extra("PDF", "pdf") from exc
     try:
         reader = PdfReader(io.BytesIO(data))
         pages = [(page_locator(number), page.extract_text()) for number, page in enumerate(reader.pages, 1)]
-    except PyPdfError as exc:
-        raise ValueError(f"{filename} is not a readable PDF: {exc}") from None
+    except DependencyError as exc:
+        # AES 加密（Acrobat 限制列印、複製的預設）要 cryptography，pdf extra 以 pypdf[crypto] 帶進來。
+        if "cryptography" in str(exc):
+            raise _missing_extra("an AES-encrypted PDF", "pdf") from exc
+        raise ValueError(f"{filename} is not a readable PDF: {_reason(exc)}") from None
+    except Exception as exc:
+        # 損壞的 PDF 除了 PyPdfError，也常讓 pypdf 丟出 KeyError、TypeError 等內建例外。
+        raise ValueError(f"{filename} is not a readable PDF: {_reason(exc)}") from None
     if not any(text.strip() for _, text in pages):
         raise ValueError(f"{filename} has no extractable text (a scanned PDF?); OCR is not supported")
     return pages
 
 
 def _read_docx(data: bytes, filename: str) -> list[Section]:
-    """以標題樣式分區段；段落與表格依文件順序，表格每列一行、儲存格以 ` | ` 隔開，空段落與空列略過。"""
+    """以標題樣式分區段；段落與表格依文件順序，表格每列一行、儲存格以 ` | ` 隔開，空段落、空標題與空列略過。"""
     try:
         import docx
-        from docx.table import Table
     except ImportError as exc:
         raise _missing_extra("DOCX", "docx") from exc
+    # python-docx 不限制解壓後的大小：幾十 KB 的 DOCX 就能展開成吃掉上 GB 記憶體的 XML。媒體檔不解析，不計入。
     try:
-        document = docx.Document(io.BytesIO(data))
-    except (zipfile.BadZipFile, KeyError) as exc:
+        with zipfile.ZipFile(io.BytesIO(data)) as package:
+            xml_size = sum(m.file_size for m in package.infolist() if m.filename.endswith((".xml", ".rels")))
+    except zipfile.BadZipFile as exc:
         raise ValueError(f"{filename} is not a readable DOCX file: {exc}") from None
+    if xml_size > _DOCX_MAX_XML_BYTES:
+        raise ValueError(
+            f"{filename} unzips to {xml_size:,} bytes of XML, more than the {_DOCX_MAX_XML_BYTES:,}-byte limit"
+        )
+    # 壞掉的 DOCX（zip、XML、文件結構）會讓 python-docx 丟出各種例外，沒有共同的例外類別。
+    try:
+        blocks = _docx_blocks(docx.Document(io.BytesIO(data)))
+    except Exception as exc:
+        raise ValueError(f"{filename} is not a readable DOCX file: {_reason(exc)}") from None
+    return _group_by_headings(blocks, joiner="\n\n")
+
+
+def _docx_blocks(document: Any) -> list[Block]:
+    from docx.table import Table
+
     blocks: list[Block] = []
     for block in document.iter_inner_content():
         if isinstance(block, Table):
-            rows = ([cell.text.strip() for cell in row.cells] for row in block.rows)
+            rows = (_docx_row_cells(row) for row in block.rows)
             level, text = 0, "\n".join(" | ".join(cells) for cells in rows if any(cells))
         else:
             heading = _DOCX_HEADING_RE.fullmatch(getattr(block.style, "name", None) or "")
             level, text = (int(heading.group(1)) if heading else 0), block.text.strip()
-        if level or text:
+        if text:
             blocks.append((level, text))
-    return _group_by_headings(blocks, joiner="\n\n")
+    return blocks
+
+
+def _docx_row_cells(row: Any) -> list[str]:
+    """一列的儲存格文字：多段落的儲存格以空白接成一行，水平合併的儲存格（同一個 `w:tc`）只取一次。"""
+    cells, previous = [], None
+    for cell in row.cells:
+        if cell._tc is not previous:
+            cells.append(" ".join(text for p in cell.paragraphs if (text := p.text.strip())))
+        previous = cell._tc
+    return cells
+
+
+def _reason(exc: Exception) -> str:
+    """例外的類別與訊息，去掉每次執行都不同的物件位址。"""
+    reason = _INDIRECT_OBJECT_ID_RE.sub(r"\1)", _ADDRESS_RE.sub("", str(exc)))
+    return f"{type(exc).__name__}: {reason}"
 
 
 def _missing_extra(kind: str, extra: str) -> ImportError:

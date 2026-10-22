@@ -68,7 +68,7 @@ uv sync --all-extras    # 核心 + 全部 extras + 開發工具（pytest、langc
 
 | extra | 內容 | 用途 |
 |---|---|---|
-| `pdf` | `pypdf` | `split` 讀 PDF |
+| `pdf` | `pypdf[crypto]` | `split` 讀 PDF（含 AES 加密、只限制列印與複製的 PDF） |
 | `docx` | `python-docx` | `split` 讀 DOCX |
 | `demo` | `fastapi`、`uvicorn` | demo 後端 |
 
