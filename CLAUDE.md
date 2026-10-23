@@ -6,7 +6,7 @@
 
 不綁定任何 RAG 框架的引用層，一次處理一輪問答。v1 依 [issue #9](https://github.com/xian-ai-1057/showreceipts/issues/9)（唯一的 spec）重寫，拆成 ticket #11–#20。#9 末尾的「開跑前裁決（2026-10-20）」優先於它上方的內文與 Spec 106。
 
-對外三個操作：`split`（Document → Passage）、`answer`（問題 + Passage → Cited Answer）、`postprocess`（外部答案 + Passage → Cited Answer）。Python API、CLI、demo HTTP 端點一一對應，輸入輸出是同一套 JSON（`models.py` 的模型）。使用說明與架構圖見 README。
+對外三個操作：`split`（Document → Passage）、`answer`（問題 + Passage → Cited Answer）、`postprocess`（外部答案 + Passage → Cited Answer）。Python API、CLI、demo HTTP 端點一一對應，輸入輸出是同一套 JSON，欄位名以 `models.py` 為準（例如 Citation 是 `{n, passage}`）。使用說明與架構圖見 README。
 
 ## 架構
 
@@ -21,14 +21,14 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 
 - **`answer` 從不自己選段**。select 由呼叫端明確呼叫：`cli._answer` 與 demo 的 `/answer` 在 document 和 passages 兩條路徑都先 select 再 answer。
 - **編號**：`answer` 先去重（`passages.dedupe`），再依給定順序編 1..M。`postprocess` 以原始清單位置（含重複）加上 `input_marker_base` 對應編號，重複者收斂到第一次出現的 Passage。兩個入口只有在「ID 不重複且 base=1」時結果相同（裁決 8）。從不依 `score` 重排。
-- **豁免區只在原始答案上判定**（fenced code、inline code、純網址）。`markers.resolve` 一併回傳處理後答案中的 `marker_spans`，`quality.py` 用它，不重掃處理後的答案。
+- **豁免區只在原始答案上判定**（fenced code、inline code、純網址）。`markers.resolve` 一併回傳處理後答案中的 `marker_spans`，`quality.py` 用它，不重掃處理後的答案。`marker_spans` 不在 JSON 裡，所以只有前端重掃（見下面 `ANSWER_TOKEN_RE`）。
 - **Quality Report 的 `sentence` 是答案的逐字子字串**；`demo/index.html` 依序用 `indexOf` 定位句子，以 `sentence_index` 對回 Uncited Sentence。改句切分時兩邊要一起看。
 - **Quality Report 只回報**：建構時拋例外就記 warning、`quality_report=None`，答案照常回傳。
 - **Splitter**：每種格式的 reader 把檔案讀成 `(Locator, 內文)` 區段，再由同一套切段邏輯切成 Passage，Passage 不跨區段（PDF 一頁一個區段）。Passage ID 是 `sha256(位元組)[:12]:序號`。`pypdf`、`docx` 只在 reader 函式內 lazy import。缺 extra 拋 `ImportError`（訊息附安裝指令）；不支援或讀不了的檔案拋 `ValueError`。
 - **錯誤對應**：CLI 接住 `OSError`、`ValueError`、`ImportError`、`GeneratorError`，訊息寫到 stderr、exit 1。demo 的 `GeneratorError` 回 502；輸入驗證、split 的 `ValueError`／`ImportError` 回 422；本文都是 `{"detail": ...}`。呼叫端自己的 Generator 拋的例外原樣往上拋。
 - **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`、`SHOWRECEIPTS_TEMPERATURE`（`default` 表示不送 temperature），CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
-- **demo 前端的 `ANSWER_TOKEN_RE` 是 `markers.py` 豁免規則的近似複本**。改豁免規則時同步改 `index.html`。前端一律以文字節點放入答案與 Passage（`el()`），不用 `innerHTML`。
-- **頂層 `__all__`** 只放四個操作與資料型別。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
+- **demo 前端的 `ANSWER_TOKEN_RE` 是 `markers.py` 豁免規則的近似複本**。`tests/test_demo_page.py` 用 node 拿 `test_markers.py` 的表格比對兩者；改了豁免規則、這個測試紅了，就同步改 `index.html`。
+- **頂層 `__all__`** 是四個操作、`Selector`／`Generator` 型別與資料模型（清單由 `test_isolation.py` 釘住）。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
 - `data/richart_passages.json` 必須等於 `from_arrkb(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。arrkb 欄位對應改了就用 adapter 重新產生這個檔案。
 
 ## 模組地圖
@@ -51,7 +51,7 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 | `demo/index.html` | 單一 HTML 前端，原生 JS／CSS，無 build |
 | `examples/langchain_postprocess.py` | LangChain 0-based 答案 → `postprocess(input_marker_base=0)` |
 | `data/` | `sample_reranked.json`（arrkb 樣本）、`richart_passages.json`（貼上模式預填）、`richart.md`（上傳模式範例） |
-| `docs/uat-v1.md` | v1 UAT 紀錄（真模型部分待 Lead 執行，以及假 Generator 的模擬檢查） |
+| `docs/uat-v1.md` | v1 UAT 紀錄（真模型與假 Generator 模擬檢查） |
 | `specs/archive/` | Tier 2 時期的 Spec 100–106，只供參考 |
 
 新功能先找現有模組放；只有放不進去、又能讓架構更好畫時才新增檔案。
@@ -62,36 +62,19 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 - 核心套件只 import stdlib 與 Pydantic v2，套件內部一律相對 import（`tests/test_isolation.py` 強制）；框架、demo 程式放在套件之外。
 - 契約（`models.py`、`config.py`）要改，先改 #9 並經 Lead（KEE）同意。
 - 術語依 GLOSSARY.md；與 ADR 衝突時明確提出，不要默默推翻。
-
-## 程式碼風格
-
-- Python 3.11+；型別寫 `str | None`，不用 `Optional`
-- DTO 用 Pydantic v2，`model_config = ConfigDict(extra="forbid")`
-- logger 用 `logging.getLogger(__name__)`；套件本身不設定 logging
-- 預設不寫註解，只在非顯然的不變式或 workaround 加單行註解；docstring 只寫 module-level 與複雜邏輯
+- 格式與 lint 由 ruff 管（設定在 `pyproject.toml`）；註解密度、測試切面、對抗式檢查等判斷型規則在 `CODING_STANDARDS.md`，寫測試前與 review 時讀。
 
 ## 測試
 
-- `uv sync --all-extras` 後跑 `uv run --all-extras pytest -q`；全部離線，模型一律用假 Generator，不打真 Ollama（需要真模型的測試標 `requires_ollama`，預設不執行，`-m requires_ollama` 才跑）
-- 測試切面依 #9 的 Testing Decisions：
-  - **主切面**：公開 API（`answer`、`postprocess`、`split`、`select`、Adapters）加上 `fake_generator` fixture，比對輸出的 JSON。
-  - **包裝層**：`test_cli.py`、`test_demo.py` 只驗證每個操作經包裝後的 JSON 等於直接呼叫 Python API 的結果，不在這層重測行為。
-  - **網路**：只有 `test_generators.py`，用 `chat_server` fixture 在 127.0.0.1 起假端點。
-  - **結構**：`test_isolation.py`。
-  - **demo 前端**：沒有自動化測試，以手動 UAT 驗收，記在 `docs/uat-v1.md`。
+- 檢查指令（CI 跑同一組，見 `.github/workflows/ci.yml`）：`uv sync --all-extras && uv run --all-extras ruff check && uv run --all-extras ruff format --check && uv run --all-extras pytest -q`。全部離線，模型一律用假 Generator；需要真模型的測試標 `requires_ollama`，`-m requires_ollama` 才跑
+- 測試放哪一層、怎麼命名見 `CODING_STANDARDS.md`「測試切面」
+- 真模型檢查：`uv run --env-file .env --all-extras showreceipts answer …`；demo 用 `.claude/launch.json` 的 `demo`（port 8765）
 - `conftest.py` 的 autouse fixture 把 `SHOWRECEIPTS_BASE_URL` 指向關閉的 port，並設 `NO_PROXY=*`；不小心用到預設 Generator 的測試會很快失敗，不會打到真模型或 proxy
 - golden fixtures 在 `tests/fixtures/golden/`，空白依 #9 裁決 6（例如 `0.3%。`，不是 Spec 106 的 `0.3% 。`）
-- 測「沒裝 extra」的情境時用 `monkeypatch.setitem(sys.modules, "pypdf", None)` 模擬，不用 `importorskip`
-- 只測外部行為：呼叫公開函式、比對輸出 JSON，不測內部函式
-- 命名：`test_<feature>_<scenario>_<expected>`
 
-## AFK 規則（/implement-spec 的 implementer 與 merger）
+## /implement-spec
 
-- #9 的 Testing Decisions 就是已同意的 seam；`/tdd` 不必再向使用者確認。
-- 不得修改 `models.py`、`config.py` 與 issue #9。非改不可時停下，回報 `BLOCKED: contract` 並附上欄位 diff；merger 拒絕任何碰到這兩個檔的分支。
-- README 與 CLAUDE.md 只由 v1-10（#20）改寫，其他 ticket 不動。
-- commit 標題：`v1-NN (#N): …`。
-- merger 每次合併後在 integration tip 上跑 `uv sync --all-extras && uv run --all-extras pytest -q`，紅燈就退回 implementer；stage 時明確列出檔名，不用 `git add -A`。
+implementer 與 merger 的 repo 規則見 `docs/agents/implement-spec.md`。
 
 ## Agent skills
 

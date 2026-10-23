@@ -56,7 +56,7 @@ def _bm25(query: list[str], documents: list[list[str]]) -> list[float]:
         df = sum(1 for count in counts if term in count)
         idf[term] = math.log(1 + (len(documents) - df + 0.5) / (df + 0.5))
     scores = []
-    for doc, count in zip(documents, counts):
+    for doc, count in zip(documents, counts, strict=True):
         norm = _K1 * (1 - _B + _B * len(doc) / avg_len)
         scores.append(sum(idf[t] * count[t] * (_K1 + 1) / (count[t] + norm) for t in terms if t in count))
     return scores

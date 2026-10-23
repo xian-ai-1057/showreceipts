@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "demo",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "--env-file", ".env", "--all-extras", "uvicorn", "demo.app:create_app", "--factory", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}

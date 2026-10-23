@@ -16,6 +16,7 @@ from typing import Any
 Generator = Callable[[str, str], str]
 
 _RETRYABLE_STATUS = frozenset({408, 409, 429})
+_MAX_ERROR_BODY = 500
 
 log = logging.getLogger(__name__)
 
@@ -79,14 +80,27 @@ class OpenAICompatGenerator:
                     return json.loads(response.read().decode("utf-8"))
             # 極深的巢狀 JSON 會讓 json.loads 拋 RecursionError，同樣算格式錯誤的回應。
             except (OSError, http.client.HTTPException, ValueError, RecursionError) as err:
-                if isinstance(err, urllib.error.HTTPError):
-                    err.close()
+                reason = _describe(err)
                 if attempt >= self.max_retries or not _is_retryable(err):
-                    raise GeneratorError(f"request to {self.url} failed: {err}") from err
+                    raise GeneratorError(f"request to {self.url} failed: {reason}") from err
                 delay = min(0.5 * 2**attempt, 8.0)
-                log.warning("request to %s failed (%s); retrying in %.1fs", self.url, err, delay)
+                log.warning("request to %s failed (%s); retrying in %.1fs", self.url, reason, delay)
             time.sleep(delay)
             attempt += 1
+
+
+def _describe(err: Exception) -> str:
+    if not isinstance(err, urllib.error.HTTPError):
+        return str(err)
+    # 端點的錯誤說明（例如模型不接受某個 temperature）只在回應本文裡。
+    try:
+        with err:
+            body = err.read(_MAX_ERROR_BODY * 4).decode("utf-8", errors="replace").strip()
+    except (OSError, http.client.HTTPException):
+        body = ""
+    if len(body) > _MAX_ERROR_BODY:
+        body = body[:_MAX_ERROR_BODY] + "…"
+    return f"{err}: {body}" if body else str(err)
 
 
 def _is_retryable(err: Exception) -> bool:

@@ -114,7 +114,9 @@ def test_split_text_without_any_boundary_is_cut_at_target_chars() -> None:
 
 
 def test_split_markdown_heading_path_follows_heading_levels() -> None:
-    document = "前言\n\n# 一、介紹\n## 卡片\n卡片說明\n### 卡面\n卡面說明\n## 平臺\n平臺說明\n# 二、費用\n年費說明\n".encode()
+    document = (
+        "前言\n\n# 一、介紹\n## 卡片\n卡片說明\n### 卡面\n卡面說明\n## 平臺\n平臺說明\n# 二、費用\n年費說明\n".encode()
+    )
 
     passages = split((document, "card.md"))
 
@@ -447,8 +449,12 @@ def test_split_docx_table_row_keeps_multi_paragraph_cell_on_one_line_and_merged_
     document = docx.Document()
     document.add_heading("年費", 1)
     table = document.add_table(rows=4, cols=3)
-    for row, texts in zip(table.rows, [["卡別", "年費", "備註"], ["正卡", "NT$4,500", "線上申辦"], ["附卡", "免年費", "限二張"]]):
-        for cell, text in zip(row.cells, texts):
+    for row, texts in zip(
+        table.rows[:3],
+        [["卡別", "年費", "備註"], ["正卡", "NT$4,500", "線上申辦"], ["附卡", "免年費", "限二張"]],
+        strict=True,
+    ):
+        for cell, text in zip(row.cells, texts, strict=True):
             cell.text = text
     table.cell(1, 1).add_paragraph("首年免年費")
     table.cell(3, 0).merge(table.cell(3, 2)).text = "以上金額含稅。"
@@ -477,7 +483,9 @@ def test_split_docx_localized_heading_style_names_count_as_headings() -> None:
 def test_split_docx_over_50_mb_of_xml_when_unzipped_raises_clear_error() -> None:
     data = _zip({**_unzipped(_tiny_docx(("p", "內文。"))), "customXml/item9.xml": bytes(50_000_000)})
 
-    with pytest.raises(ValueError, match=r"huge\.docx unzips to [\d,]+ bytes of XML, more than the 50,000,000-byte limit"):
+    with pytest.raises(
+        ValueError, match=r"huge\.docx unzips to [\d,]+ bytes of XML, more than the 50,000,000-byte limit"
+    ):
         split((data, "huge.docx"))
 
 
@@ -510,8 +518,14 @@ def test_split_docx_without_docx_extra_raises_with_install_command(monkeypatch: 
         _docx_of_another_office_type(),
     ],
     ids=[
-        "not-zip", "broken-zip", "zip-without-word-document", "broken-xml", "corrupt-deflate", "no-body",
-        "not-a-document", "another-office-type",
+        "not-zip",
+        "broken-zip",
+        "zip-without-word-document",
+        "broken-xml",
+        "corrupt-deflate",
+        "no-body",
+        "not-a-document",
+        "another-office-type",
     ],
 )
 def test_split_docx_that_cannot_be_parsed_raises_clear_error(data: bytes) -> None:

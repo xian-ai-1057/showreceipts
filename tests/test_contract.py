@@ -81,7 +81,8 @@ def test_cited_answer_non_contiguous_n_rejected() -> None:
     a, b = _passage("a"), _passage("b")
     with pytest.raises(ValidationError, match="1..2 in order"):
         CitedAnswer(
-            answer="", raw_answer="",
+            answer="",
+            raw_answer="",
             citations=[Citation(n=1, passage=a), Citation(n=3, passage=b)],
             passages=[a, b],
         )
@@ -91,7 +92,8 @@ def test_cited_answer_out_of_order_n_rejected() -> None:
     a, b = _passage("a"), _passage("b")
     with pytest.raises(ValidationError, match="1..2 in order"):
         CitedAnswer(
-            answer="", raw_answer="",
+            answer="",
+            raw_answer="",
             citations=[Citation(n=2, passage=a), Citation(n=1, passage=b)],
             passages=[a, b],
         )
@@ -106,7 +108,8 @@ def test_cited_answer_passage_cited_twice_rejected() -> None:
     a = _passage("a")
     with pytest.raises(ValidationError, match="at most once"):
         CitedAnswer(
-            answer="", raw_answer="",
+            answer="",
+            raw_answer="",
             citations=[Citation(n=1, passage=a), Citation(n=2, passage=a)],
             passages=[a],
         )
@@ -115,7 +118,8 @@ def test_cited_answer_passage_cited_twice_rejected() -> None:
 def test_cited_answer_citation_outside_passages_rejected() -> None:
     with pytest.raises(ValidationError, match="not in passages"):
         CitedAnswer(
-            answer="", raw_answer="",
+            answer="",
+            raw_answer="",
             citations=[Citation(n=1, passage=_passage("ghost"))],
             passages=[_passage("a")],
         )
