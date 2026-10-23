@@ -191,15 +191,87 @@ const $ = (id) => document.getElementById(id);
 let turnCount = 0;
 let currentDocument = null;  // { name, blob, sample }：上傳模式送出的 Document
 
-// 和 markers.py 一樣，fenced code、inline code、連結網址、純網址裡的 [n] 不是 Citation Marker（顯示用的近似判定；
-// 收尾 fence 不比對引言層數）。豁免區以外的 [n] 都是後處理寫出的引用，n 對應 citations 裡的顯示編號。
-const ANSWER_TOKEN_RE = new RegExp([
-  /^[ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?<fence>`{3,}(?=[^`\n]*$)|~{3,})[^]*?(?:^[ \t]*(?:>[ \t]*)*\k<fence>[`~]*[ \t\r]*$|(?![^]))/.source,
-  /(?<![`\\])(?<ticks>`+)(?!`)(?:(?!\n[ \t\r]*\n)[^])+?(?<!`)\k<ticks>(?!`)/.source,
-  /(?<=\]\()https?:\/\/(?:[^\s()]|\([^\s()]*\))*(?=[\s)])|(?<=<)https?:\/\/[^\s<>]*(?=>)/.source,
-  /https?:\/\/(?:[!-~]|[^\s\p{P}～])*/.source,
-  /\[(?<n>\d+)\]/.source,
-].join("|"), "gmu");
+// <markers-port>
+// markers.py 豁免區判定（_exempt_spans）的逐步移植：fenced code、inline code、連結網址、純網址裡的 [n] 不是
+// Citation Marker；豁免區以外的 [n] 都是後處理寫出的引用，n 對應 citations 裡的顯示編號。
+// Python 的 `^`、`$`、`\s`、`\d` 與 JS 不同，這裡改寫成等義的寫法；finditer(text, start, end) 看不到 end 之後的字，
+// 以 text.slice(0, end) 加 lastIndex 對應。tests/test_demo_page.py 用 node 拿這段和 Python 比對。
+const SPACE = String.raw`\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000`;  // str.isspace
+// 純網址停在空白或全形標點：東亞寬度 F、W 的標點（由 Python unicodedata 產生），加上 markers._FULLWIDTH_EXTRA。
+const FULLWIDTH_PUNCTUATION = String.raw`“”‘’…—～\u2329\u232a\u3001-\u3003\u3008-\u3011\u3014-\u301f\u3030\u303d\u30a0\u30fb\ufe10-\ufe19\ufe30-\ufe52\ufe54-\ufe61\ufe63\ufe68\ufe6a\ufe6b\uff01-\uff03\uff05-\uff0a\uff0c-\uff0f\uff1a\uff1b\uff1f\uff20\uff3b-\uff3d\uff3f\uff5b\uff5d\uff5f\uff60\u{16fe2}`;
+const URL_END_RE = new RegExp(`[${SPACE}${FULLWIDTH_PUNCTUATION}]`, "u");
+const FENCE_OPEN_RE = /(?<![^\n])[ \t]*(?:>[ \t]*|(?:[-*+]|\p{Nd}{1,9}[.)])[ \t]+)*(`{3,}(?=[^`\n]*(?![^\n]))|~{3,})/gu;
+const INLINE_CODE_RE = /(?<![`\\])(`+)(?!`)(?:(?!\n[ \t\r]*\n)[^])+?(?<!`)\1(?!`)/gu;
+const LINK_URL_RE = new RegExp(
+  String.raw`(?<=\]\()https?://(?:[^${SPACE}()]|\([^${SPACE}()]*\))*(?=[${SPACE})])` +
+  String.raw`|(?<=<)https?://[^${SPACE}<>]*(?=>)`, "gu");
+const URL_START_RE = /https?:\/\//gu;
+const MARKER_RE = /\[(\d+)\]/gu;
+
+function matchesIn(re, text, start, end) {
+  const scope = text.slice(0, end);
+  const found = [];
+  re.lastIndex = start;
+  for (let m; (m = re.exec(scope)) !== null;) found.push(m);
+  return found;
+}
+
+function gaps(spans, length) {
+  const edges = [0, ...spans.flat(), length];
+  return edges.filter((_, i) => i % 2 === 0).map((start, i) => [start, edges[2 * i + 1]]);
+}
+
+function search(re, text, start) {
+  re.lastIndex = start;
+  return re.exec(text);
+}
+
+function fencedCode(text) {
+  const blocks = [];
+  let end = 0;
+  for (let opening; (opening = search(FENCE_OPEN_RE, text, end));) {
+    const fence = opening[1];
+    const quotes = (opening[0].slice(0, -fence.length).match(/>/g) || []).length;
+    const close = new RegExp(String.raw`(?<![^\n])[ \t]*(?:>[ \t]*){${quotes}}${fence[0]}{${fence.length},}[ \t\r]*(?![^\n])`, "gu");
+    const closing = search(close, text, opening.index + opening[0].length);
+    end = closing ? closing.index + closing[0].length : text.length;
+    blocks.push([opening.index, end]);
+  }
+  return blocks;
+}
+
+function bareUrls(text, start, end) {
+  const urls = [];
+  const scope = text.slice(0, end);
+  for (let m; (m = search(URL_START_RE, scope, start));) {
+    let pos = m.index + m[0].length;
+    while (pos < end) {
+      const char = String.fromCodePoint(text.codePointAt(pos));
+      if (URL_END_RE.test(char)) break;
+      pos += char.length;
+    }
+    urls.push([m.index, pos]);
+    start = pos;
+  }
+  return urls;
+}
+
+const spansOf = (re) => (text, start, end) => matchesIn(re, text, start, end).map((m) => [m.index, m.index + m[0].length]);
+
+function exemptSpans(text) {
+  let spans = fencedCode(text);
+  for (const find of [spansOf(INLINE_CODE_RE), spansOf(LINK_URL_RE), bareUrls]) {
+    const found = gaps(spans, text.length).flatMap(([start, end]) => find(text, start, end));
+    spans = [...spans, ...found].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  }
+  return spans;
+}
+
+function citationMarkers(text) {
+  return gaps(exemptSpans(text), text.length).flatMap(([start, end]) =>
+    matchesIn(MARKER_RE, text, start, end).map((m) => ({ start: m.index, end: m.index + m[0].length, n: Number(m[1]) })));
+}
+// </markers-port>
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -370,11 +442,10 @@ function renderAnswer(cited) {
   const text = cited.answer;
   const { sentences, entities } = qualityRanges(cited);
   const tokens = [...entities];
-  for (const match of text.matchAll(ANSWER_TOKEN_RE)) {
-    const n = match.groups.n === undefined ? null : Number(match.groups.n);
+  for (const { start, end, n } of citationMarkers(text)) {
     const citation = cited.citations.find((c) => c.n === n);
     if (!citation) continue;
-    tokens.push({ start: match.index, end: match.index + match[0].length, render: () => markerButton(match[0], citation) });
+    tokens.push({ start, end, render: () => markerButton(text.slice(start, end), citation) });
   }
   tokens.sort((a, b) => a.start - b.start);
   // text[from:to) 轉成節點；只放完全落在範圍內的 token，跨界的照純文字顯示。
