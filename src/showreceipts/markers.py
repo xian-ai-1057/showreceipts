@@ -83,7 +83,7 @@ def _exempt_spans(text: str) -> list[tuple[int, int]]:
 
 def _gaps(spans: list[tuple[int, int]], length: int) -> list[tuple[int, int]]:
     edges = [0, *(i for span in spans for i in span), length]
-    return list(zip(edges[::2], edges[1::2]))
+    return list(zip(edges[::2], edges[1::2], strict=True))
 
 
 def fence_close_re(fence: str, quotes: int = 0) -> re.Pattern[str]:

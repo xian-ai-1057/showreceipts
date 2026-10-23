@@ -178,7 +178,7 @@ def test_answer_overridden_templates_substitute_once_and_keep_other_braces(fake_
         "Q: what is {context_blocks}?\n"
         "<1|a.md|p1> mentions {question} and {n}\n"
         "<2|b.md|> plain"
-    )
+    )  # fmt: skip
 
 
 def test_answer_templates_missing_placeholders_warn_without_raising(fake_generator, caplog) -> None:

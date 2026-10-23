@@ -29,6 +29,7 @@ def _check(raw: str, n: int, base: int, expected: str, cited: list[int], fabrica
     assert result.fabricated_markers == fabricated
 
 
+# fmt: off
 GRAMMAR = [
     ("1", "句A [2]. 句B [4][2][99].", 5, 1, "句A [1]. 句B [2][1].", [2, 4], ["[99]"]),
     ("2", "年費 NT$4,500 [1-3]。", 5, 1, "年費 NT$4,500 [1][2][3]。", [1, 2, 3], []),
@@ -80,6 +81,7 @@ GRAMMAR = [
     ("fullwidth-leading-zeros", "甲 [０００００００００２]。", 3, 1, "甲 [1]。", [2], []),
     ("leading-zeros-in-range", "甲 [00000000002-00000000003]。", 3, 1, "甲 [1][2]。", [2, 3], []),
 ]
+# fmt: on
 
 
 @pytest.mark.parametrize(
@@ -91,6 +93,7 @@ def test_markers_grammar_worked_example_normalized(
     _check(raw, n, base, expected, cited, fabricated)
 
 
+# fmt: off
 DELETION = [
     ("13", "甲 [99] 乙  丙 [1]。", 3, 1, "甲 乙  丙 [1]。", [1], ["[99]"]),
     ("14", "甲 [99]。", 3, 1, "甲。", [], ["[99]"]),
@@ -117,6 +120,7 @@ DELETION = [
     ("private-use-chars-in-input-kept", "姓名：王\ue000明 [1]，甲 \ue001[2]\ue002 乙 [9]。", 3, 1,
      "姓名：王\ue000明 [1]，甲 \ue001[2]\ue002 乙。", [1, 2], ["[9]"]),
 ]
+# fmt: on
 
 
 @pytest.mark.parametrize(
@@ -128,6 +132,7 @@ def test_markers_deletion_worked_example_cleaned_locally(
     _check(raw, n, base, expected, cited, fabricated)
 
 
+# fmt: off
 EXEMPTION = [
     ("40", "用 `list[0]` 取值 [1]", 3, 0, "用 `list[0]` 取值 [1]", [2], []),
     ("41", "見 https://x.com/a[2]/b 甲 [1]。", 3, 1, "見 https://x.com/a[2]/b 甲 [1]。", [1], []),
@@ -179,6 +184,7 @@ EXEMPTION = [
      "第一段 ` 符號 [1]。\n\n第二段 `code` [2]。", [1, 2], []),
     ("inline-code-stops-at-whitespace-line", "甲 ` [1]\n \t\r\n乙 ` [2]", 3, 1, "甲 ` [1]\n \t\r\n乙 ` [2]", [1, 2], []),
 ]
+# fmt: on
 
 
 @pytest.mark.parametrize(
@@ -227,13 +233,28 @@ def test_markers_huge_range_not_expanded_completes_fast() -> None:
     assert elapsed < 0.5
 
 
+@pytest.mark.parametrize(
+    "raw",
+    ["年費 NT$4,500 元，回饋 3.8% [1][2]。\n" * 5000, "甲 ` [1] 乙 `` [2]\n" * 8000, "```\na[1]\n" * 10000 + " [2]"],
+    ids=["prose", "inline-code", "fences"],
+)
+def test_markers_answer_of_135000_chars_resolved_under_500ms(raw: str) -> None:
+    started = time.perf_counter()
+    _run(raw, 3, 1)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.5
+
+
 # Spec 106 的重複 ID 表：Passage 清單是 A、B、A′（與 A 同 ID、內文不同），postprocess 用 base 1。
 # 每列是（例號, 入口, 原答, 最終答案, citations 依 n 的 Passage ID）。
+# fmt: off
 DUPLICATE_IDS = [
     ("19", "postprocess", "x [3] y [2] z [1]。", "x [1] y [2] z [1]。", ["A", "B"]),
     ("20", "answer", "y [2] x [1]。", "y [1] x [2]。", ["B", "A"]),
     ("23", "postprocess", "x [1-3]。", "x [1][2][1]。", ["A", "B"]),
 ]
+# fmt: on
 
 
 @pytest.mark.parametrize(

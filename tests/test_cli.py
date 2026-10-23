@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 
 import pytest
-
 from conftest import CLOSED_ENDPOINT, chat_reply
+
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess, select, split
 from showreceipts.cli import default_generator, main
 

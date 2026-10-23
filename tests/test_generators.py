@@ -1,11 +1,12 @@
 """OpenAICompatGenerator 的網路邊界：對 127.0.0.1 上的假端點驗證請求格式、重試與退避、錯誤包裝。"""
 
+import re
 import time
 import urllib.error
 
 import pytest
-
 from conftest import CLOSED_ENDPOINT, chat_reply
+
 from showreceipts import GeneratorError, OpenAICompatGenerator
 
 
@@ -130,3 +131,21 @@ def test_openai_compat_invalid_base_url_raises_generator_error_without_retry(sle
         OpenAICompatGenerator(base_url=base_url, model="m")("s", "u")
 
     assert sleeps == []
+
+
+def test_openai_compat_http_error_message_includes_response_body(chat_server, sleeps) -> None:
+    detail = "'temperature' does not support 0.0 with this model. Only the default (1) value is supported."
+    chat_server.responses = [(400, {"error": {"message": detail}})]
+
+    with pytest.raises(GeneratorError, match=re.escape(detail)):
+        OpenAICompatGenerator(base_url=chat_server.base_url, model="m")("s", "u")
+
+
+def test_openai_compat_http_error_body_truncated_to_500_chars(chat_server, sleeps) -> None:
+    chat_server.responses = [(400, b"x" * 5000)]
+
+    with pytest.raises(GeneratorError) as excinfo:
+        OpenAICompatGenerator(base_url=chat_server.base_url, model="m")("s", "u")
+
+    assert "x" * 500 + "…" in str(excinfo.value)
+    assert "x" * 501 not in str(excinfo.value)

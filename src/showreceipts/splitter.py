@@ -15,8 +15,8 @@ import io
 import re
 import zipfile
 from collections.abc import Callable
-from typing import Any
 from pathlib import Path, PurePath
+from typing import Any
 
 from .markers import FENCE_OPEN_RE, fence_close_re, fence_quotes
 from .models import Passage

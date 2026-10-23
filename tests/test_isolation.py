@@ -1,12 +1,19 @@
-"""結構檢查：核心套件只依賴 stdlib 與 Pydantic，套件內部一律相對 import。"""
+"""結構檢查：核心套件只依賴 stdlib 與 Pydantic、套件內部一律相對 import，以及其他寫成規則就會被忘掉的約定。"""
 
 import ast
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+from conftest import CLOSED_ENDPOINT
+from pydantic import BaseModel
+
+import demo.app
 import showreceipts
+from showreceipts import config, models
 
 PACKAGE_DIR = Path(showreceipts.__file__).parent
 ALLOWED_THIRD_PARTY = {"pydantic"}
@@ -71,6 +78,52 @@ def test_isolation_core_never_imports_itself_absolutely() -> None:
 def test_isolation_public_names_all_importable() -> None:
     missing = [name for name in showreceipts.__all__ if not hasattr(showreceipts, name)]
     assert not missing
+
+
+def test_isolation_public_names_exactly_operations_types_and_models() -> None:
+    assert set(showreceipts.__all__) == {
+        "answer", "postprocess", "split", "select",
+        "Selector", "Generator", "OpenAICompatGenerator", "GeneratorError",
+        "Passage", "Citation", "CitedAnswer", "QualityReport", "SentenceSupport", "EntityFlag", "EntityKind",
+        "UncitedSentence", "ShowReceiptsConfig", "DEFAULT_NO_ANSWER_REPLY",
+    }  # fmt: skip
+
+
+def test_isolation_every_pydantic_model_forbids_extra_fields() -> None:
+    classes = [
+        obj
+        for module in (models, config, demo.app)
+        for obj in vars(module).values()
+        if isinstance(obj, type) and issubclass(obj, BaseModel) and obj.__module__ == module.__name__
+    ]
+    assert len(classes) >= 11
+    assert [c.__name__ for c in classes if c.model_config.get("extra") != "forbid"] == []
+
+
+def _environ_reads(path: Path) -> bool:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return any(isinstance(node, ast.Attribute) and node.attr in {"environ", "getenv"} for node in ast.walk(tree))
+
+
+def test_isolation_only_cli_reads_environment_variables() -> None:
+    readers = sorted(str(p.relative_to(PACKAGE_DIR)) for p in PACKAGE_DIR.rglob("*.py") if _environ_reads(p))
+    assert readers == ["cli.py"]
+
+
+def test_isolation_package_never_configures_logging() -> None:
+    offending = [
+        str(path.relative_to(PACKAGE_DIR))
+        for path in PACKAGE_DIR.rglob("*.py")
+        if re.search(r"basicConfig|addHandler|setLevel|dictConfig", path.read_text(encoding="utf-8"))
+    ]
+    assert offending == []
+
+
+def test_isolation_offline_fixture_covers_every_env_var_cli_reads() -> None:
+    names = set(re.findall(r"SHOWRECEIPTS_[A-Z_]+", (PACKAGE_DIR / "cli.py").read_text(encoding="utf-8")))
+    assert names, "expected cli.py to read SHOWRECEIPTS_* variables"
+    leaked = {name: os.environ[name] for name in names if os.environ.get(name, CLOSED_ENDPOINT) != CLOSED_ENDPOINT}
+    assert leaked == {}, "add these to the autouse fixture in conftest.py"
 
 
 # 在乾淨的直譯器裡封鎖框架、demo 與選配套件，確認核心與兩個 Adapter 仍能 import 並執行。

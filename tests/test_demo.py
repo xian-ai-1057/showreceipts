@@ -8,9 +8,9 @@ import time
 from pathlib import Path
 
 import pytest
+from conftest import CLOSED_ENDPOINT, chat_reply
 from fastapi.testclient import TestClient
 
-from conftest import CLOSED_ENDPOINT, chat_reply
 from demo.app import create_app
 from showreceipts import Passage, ShowReceiptsConfig, answer, postprocess, select, split
 
