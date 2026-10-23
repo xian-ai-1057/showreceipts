@@ -21,13 +21,13 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 
 - **`answer` 從不自己選段**。select 由呼叫端明確呼叫：`cli._answer` 與 demo 的 `/answer` 在 document 和 passages 兩條路徑都先 select 再 answer。
 - **編號**：`answer` 先去重（`passages.dedupe`），再依給定順序編 1..M。`postprocess` 以原始清單位置（含重複）加上 `input_marker_base` 對應編號，重複者收斂到第一次出現的 Passage。兩個入口只有在「ID 不重複且 base=1」時結果相同（裁決 8）。從不依 `score` 重排。
-- **豁免區只在原始答案上判定**（fenced code、inline code、純網址）。`markers.resolve` 一併回傳處理後答案中的 `marker_spans`，`quality.py` 用它，不重掃處理後的答案。`marker_spans` 不在 JSON 裡，所以只有前端重掃（見下面 `ANSWER_TOKEN_RE`）。
+- **豁免區只在原始答案上判定**（fenced code、inline code、純網址）。`markers.resolve` 一併回傳處理後答案中的 `marker_spans`，`quality.py` 用它，不重掃處理後的答案。`marker_spans` 不在 JSON 裡，所以只有前端重掃（見下面 `citationMarkers`）。
 - **Quality Report 的 `sentence` 是答案的逐字子字串**；`demo/index.html` 依序用 `indexOf` 定位句子，以 `sentence_index` 對回 Uncited Sentence。改句切分時兩邊要一起看。
 - **Quality Report 只回報**：建構時拋例外就記 warning、`quality_report=None`，答案照常回傳。
 - **Splitter**：每種格式的 reader 把檔案讀成 `(Locator, 內文)` 區段，再由同一套切段邏輯切成 Passage，Passage 不跨區段（PDF 一頁一個區段）。Passage ID 是 `sha256(位元組)[:12]:序號`。`pypdf`、`docx` 只在 reader 函式內 lazy import。缺 extra 拋 `ImportError`（訊息附安裝指令）；不支援或讀不了的檔案拋 `ValueError`。
 - **錯誤對應**：CLI 接住 `OSError`、`ValueError`、`ImportError`、`GeneratorError`，訊息寫到 stderr、exit 1。demo 的 `GeneratorError` 回 502；輸入驗證、split 的 `ValueError`／`ImportError` 回 422；本文都是 `{"detail": ...}`。呼叫端自己的 Generator 拋的例外原樣往上拋。
 - **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`、`SHOWRECEIPTS_TEMPERATURE`（`default` 表示不送 temperature），CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
-- **demo 前端的 `ANSWER_TOKEN_RE` 是 `markers.py` 豁免規則的近似複本**。`tests/test_demo_page.py` 用 node 拿 `test_markers.py` 的表格比對兩者；改了豁免規則、這個測試紅了，就同步改 `index.html`。
+- **demo 前端的 `citationMarkers`（`index.html` 的 `<markers-port>` 區塊）是 `markers.py` 豁免判定的逐步移植**。`tests/test_demo_page.py` 用 node 拿 `test_markers.py` 的表格與隨機答案比對兩者；改了豁免規則、這個測試紅了，就同步改 `index.html`。
 - **頂層 `__all__`** 是四個操作、`Selector`／`Generator` 型別與資料模型（清單由 `test_isolation.py` 釘住）。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
 - `data/richart_passages.json` 必須等於 `from_arrkb(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。arrkb 欄位對應改了就用 adapter 重新產生這個檔案。
 

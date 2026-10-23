@@ -306,7 +306,7 @@ uv run --all-extras ruff check && uv run --all-extras ruff format --check
 uv run --all-extras pytest -q     # 全部離線，模型一律用假 Generator；CI 跑同一組
 ```
 
-需要真模型的測試標 `requires_ollama`，預設不執行，用 `-m requires_ollama` 才會跑。demo 前端除了 `ANSWER_TOKEN_RE` 與 Python 的比對（`tests/test_demo_page.py`）之外，以手動 UAT 驗收，結果記在 [docs/uat-v1.md](docs/uat-v1.md)。給 Claude Code 的專案規則見 [CLAUDE.md](CLAUDE.md)。
+需要真模型的測試標 `requires_ollama`，預設不執行，用 `-m requires_ollama` 才會跑。demo 前端除了 `[n]` 判定與 Python 的比對（`tests/test_demo_page.py`）之外，以手動 UAT 驗收，結果記在 [docs/uat-v1.md](docs/uat-v1.md)。給 Claude Code 的專案規則見 [CLAUDE.md](CLAUDE.md)。
 
 ## 文件
 
