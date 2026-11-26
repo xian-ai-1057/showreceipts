@@ -15,7 +15,7 @@ def test_answer_same_raw_answer_matches_postprocess(fake_generator) -> None:
     passages = [Passage.model_validate(p) for p in golden["passages"]]
     fake_generator.reply = golden["raw_answer"]
 
-    cited = answer("Richart 卡的回饋是多少？", passages, fake_generator)
+    cited = answer("Lumen 卡的回饋是多少？", passages, fake_generator)
 
     assert cited == postprocess(golden["raw_answer"], passages)
     assert cited.raw_answer == golden["raw_answer"]
@@ -35,7 +35,7 @@ DEFAULT_SYSTEM_PROMPT = """你是一個嚴謹的問答助理。你會收到使�
 
 def test_answer_default_prompts_number_blocks_and_omit_empty_locator(fake_generator) -> None:
     passages = [
-        Passage(id="a", text="年費 4,500 元", source="richart.md", locator="三、年費"),
+        Passage(id="a", text="年費 4,500 元", source="lumen.md", locator="三、年費"),
         Passage(id="b", text="回饋 0.3%", source="notes.txt"),
     ]
 
@@ -45,7 +45,7 @@ def test_answer_default_prompts_number_blocks_and_omit_empty_locator(fake_genera
     assert system == DEFAULT_SYSTEM_PROMPT
     assert user == (
         "【參考資料】\n"
-        "[1] 來源: richart.md（三、年費）\n年費 4,500 元\n"
+        "[1] 來源: lumen.md（三、年費）\n年費 4,500 元\n"
         "\n"
         "[2] 來源: notes.txt\n回饋 0.3%\n"
         "\n\n"

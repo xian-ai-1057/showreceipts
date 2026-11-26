@@ -20,7 +20,7 @@
 
 | 候選 | ① 框架無關、檢索後 | ② 解析＋首次出現重編號 | ③ 刪除 Fabricated Marker | ④ 不呼叫模型、可用於中文的檢查 | ⑤ 注入任意模型 |
 |---|---|---|---|---|---|
-| [STORM](https://github.com/stanford-oval/storm) | ✗ 重編號寫在 `StormArticle` 內（[storm_dataclass.py](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/knowledge_storm/storm_wiki/modules/storm_dataclass.py)） | ✓ `reorder_reference_index` | ✓ 刪越界標記，但有 off-by-one（[utils.py](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/knowledge_storm/utils.py)） | ✗ | ✗ |
+| [STORM](https://github.com/stanford-oval/storm) | ✗ 重編號寫在 `StormArticle` 內（[storm_dataclass.py](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/demo_kb/storm_wiki/modules/storm_dataclass.py)） | ✓ `reorder_reference_index` | ✓ 刪越界標記，但有 off-by-one（[utils.py](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/demo_kb/utils.py)） | ✗ | ✗ |
 | [Onyx](https://github.com/onyx-dot-app/onyx) `DynamicCitationProcessor` | ✗ 應用內部 | ✗ 顯示原編號，新文件取 `max+1`（[source](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/chat/citation_processor.py)） | ✓ HYPERLINK／REMOVE 模式丟棄未知編號；`[1, 99]` 只保留 1 | ✗ | ✗ 應用本身支援 Ollama，但沒有注入介面 |
 | [langchain-references](https://www.github.com/pprados/langchain-references) | ✗ 包裝 LangChain Runnable | ✓ 去重、重編號 | ？ | ✗ | 只能透過 LangChain 模型 |
 | [LongCite](https://github.com/THUDM/LongCite) | ✗ | ✗ | ✓ 只限它自己的 `<cite>[a-b]` 格式（[vllm_inference.py](https://raw.githubusercontent.com/THUDM/LongCite/HEAD/vllm_inference.py)） | ✗ 以 GPT-4o 評審 | ✗ |
@@ -53,7 +53,7 @@
 | [citation-guard](https://github.com/sibalabs/citation-guard) | 每個 `[n]` 都要有逐字 quote；quote 只出現在**唯一另一段**時自動改指，有歧義就拒絕；答案沒有標記時，只替已驗證的 quote 補上標記 | 不重編號；失敗時整份拒絕，不是刪掉單一標記 | 0 stars、1 commit、MIT |
 | [langchain-references](https://www.github.com/pprados/langchain-references) | 串流時先暫存疑似標記的 token；去重並重編號；同一 URL 的片段共用一個編號；未被引用的片段不列入參考清單 | 綁定 LangChain；README 裡的標記格式前後不一致；未說明怎麼處理無效 ID | 2 stars、Apache-2.0、PyPI 1.0.0（2025-12-22，[PyPI](https://pypi.org/project/langchain-references/)） |
 | [Onyx `citation_processor.py`](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/chat/citation_processor.py) | regex 接受 `[n]`、`[[n]]`、`[1, 2]` 以及全形 `【】`、`［］`；略過 code fence 內的標記；串流時暫存不完整標記；三種模式 HYPERLINK／KEEP_MARKERS／REMOVE | 不重編號（`cited_documents_in_order` 只記錄順序，不改寫文字）；是應用內部元件 | Onyx 32.5k stars，CE 為 MIT（[repo](https://github.com/onyx-dot-app/onyx)） |
-| [STORM `ArticleTextProcessing`](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/knowledge_storm/utils.py) | `update_citation_index` 經 `__PLACEHOLDER_n__` 分兩段替換，避免連鎖替換；[`reorder_reference_index`](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/knowledge_storm/storm_wiki/modules/storm_dataclass.py) 依首次出現編成 1..N；刪除越界標記 | 1-based 標記被當成 0-based 處理，`[len(sources)]` 這個合法編號也會被刪掉；`parse_citation_indices` 不認 `[1, 2]` | 31.6k stars、MIT、knowledge-storm 1.1.1（[PyPI](https://pypi.org/project/knowledge-storm)） |
+| [STORM `ArticleTextProcessing`](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/demo_kb/utils.py) | `update_citation_index` 經 `__PLACEHOLDER_n__` 分兩段替換，避免連鎖替換；[`reorder_reference_index`](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/demo_kb/storm_wiki/modules/storm_dataclass.py) 依首次出現編成 1..N；刪除越界標記 | 1-based 標記被當成 0-based 處理，`[len(sources)]` 這個合法編號也會被刪掉；`parse_citation_indices` 不認 `[1, 2]` | 31.6k stars、MIT、knowledge-storm 1.1.1（[PyPI](https://pypi.org/project/knowledge-storm)） |
 | [citecite / citecite-mcp](https://www.getdrio.com/mcp/io-github-mukundakatta-citecite-mcp/md) | 一個 Rust crate 加 npm MCP server，提供 `inject_citations`、`parse_citations`、`strip_citations` 三個工具（[mcp-stack](https://github.com/MukundaKatta/mcp-stack)、[rust-llm-stack](https://github.com/MukundaKatta/rust-llm-stack)） | 文件沒寫是否重編號、是否刪除無效標記 | npm 0.1.1、0 stars、MIT OR Apache-2.0 |
 | [ragcite](https://github.com/pcbeingused333/ragcite) | 確定性的 ID 集合比對，回傳 `fabricated` 集合；`strip_reasoning` 移除 `<think>`；`judge_fn` 可注入；`check_judge_independence` 防止評審模型和受測系統是同一個 | 只評估，不改寫答案 | v0.6.0、0 stars、9 commits、MIT，尚未上 PyPI |
 | [markdown-ai-cite-remove（mdcr）](https://dev.to/opensite/santa-came-early-i-just-published-a-rust-crate-and-cli-tool-to-take-care-of-ai-markdown-citations-521h) | 移除 `[1]`、`[source:1]`、`[ref:2]`、參考連結定義、References 標題 | 全部刪掉，不驗證也不重編號 | crates.io；repo 未確認 |
@@ -242,7 +242,7 @@
    - 目前 `CITE_RE = r"\[(\d+)\]"` 不認這些寫法。不要照抄 ALCE 的 `r"\[\d+"`，它會把 `[1, 2]` 讀成 1（[eval.py](https://raw.githubusercontent.com/princeton-nlp/ALCE/main/eval.py)）。
 2. **邊界案例寫成回歸測試**
    - `[0]` 不能當成 -1 處理（Haystack 有明確的範圍判斷）。
-   - `n == len(passages)` 必須保留（STORM 的 [off-by-one](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/knowledge_storm/utils.py)）。
+   - `n == len(passages)` 必須保留（STORM 的 [off-by-one](https://raw.githubusercontent.com/stanford-oval/storm/HEAD/demo_kb/utils.py)）。
    - 現在 `renumber_and_filter` 用一次 `re.sub` 加 callback 替換，本來就不會發生 STORM 擔心的連鎖替換。之後若改成逐一 `str.replace`，就要改用 placeholder 兩段式。
 3. **只在編輯點清理空白**（Vaquill），並略過 code fence 內的標記（[Onyx CodeFenceTracker](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/chat/citation_processor.py)；[RAGFlow 也保留 code fence](https://github.com/infiniflow/ragflow/blob/main/rag/nlp/search.py)）。目前 `_MULTI_SPACE_RE` 會對全文壓縮連續空白，可能破壞 Markdown 縮排。若要從字串中刪多處，應由尾端往前刪（[OpenAI strip_citations](https://developers.openai.com/api/docs/guides/citation-formatting.md)、[Gemini 範例](https://ai.google.dev/gemini-api/docs/generate-content/google-search)）。
 4. **解析前先剝掉 `<think>`**（[ragcite `strip_reasoning`](https://github.com/pcbeingused333/ragcite)），否則 qwen3 系列思考區塊裡的 `[n]` 也會被算進去。
@@ -308,7 +308,7 @@
 3. 一句話唯一的標記是編造的：保留成未引用句（現行做法）、整句刪除（VeriCite）、還是整份拒答（rag-citation-gate）？要不要做成 `on_fail` 政策？
 4. 「建議改指」只放在報告裡，還是在唯一明確時自動改寫，像 citation-guard 那樣？自動改寫要怎麼留下稽核紀錄？
 5. 指標要在清理前算、清理後算，還是兩者都給？`hallucination_rate` 的分母用標記數還是句數？
-6. 顯示編號要以 chunk 為單位，還是同一文件合併成一號？arrkb 的 reranked 結果可能有多個 chunk 來自同一份文件。
+6. 顯示編號要以 chunk 為單位，還是同一文件合併成一號？rerank API 的 reranked 結果可能有多個 chunk 來自同一份文件。
 7. 不呼叫模型的前提下，怎麼判定功能句或非可引用句？靠長度、有沒有數字、轉折詞表，還是由 prompt 要求模型標記？
 8. 3-gram 比對前要做哪些正規化：NFKC、全半形、繁簡統一（OpenCC）、標點去除？要把「臺／台」視為同一字嗎？
 9. 數字檢查的範圍：萬／億、中文數字（要不要依賴 cn2an）、民國年、百分比與「成」、區間？「矛盾」需要對齊同一個欄位，「缺席」不需要，這兩者用規則做得到可靠區分嗎？

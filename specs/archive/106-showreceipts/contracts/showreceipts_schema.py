@@ -17,11 +17,11 @@ Quality Report / No-Answer Reply。
 Usage:
     from src.showreceipts import Passage, ShowReceiptsConfig, answer, postprocess
 
-    passages = [Passage(id="p1", text="…", source="richart.docx.txt", locator="第 1 頁")]
+    passages = [Passage(id="p1", text="…", source="lumen.docx.txt", locator="第 1 頁")]
     cited = postprocess("年費 NT$4,500 [1, 2]。", passages)
 
 Fixtures:
-    contracts/fixtures/passage_arrkb_example.json
+    contracts/fixtures/passage_rerank_example.json
     contracts/fixtures/cited_answer_example.json
     contracts/fixtures/cited_answer_no_answer_example.json
     contracts/fixtures/quality_report_uncited_example.json
@@ -68,7 +68,7 @@ class Passage(BaseModel):
 
     Acceptance:
         - 對應 spec.md §6 AC #1、#7、#8
-        - golden fixture：contracts/fixtures/passage_arrkb_example.json
+        - golden fixture：contracts/fixtures/passage_rerank_example.json
     """
 
     model_config = ConfigDict(extra="forbid")

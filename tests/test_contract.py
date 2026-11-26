@@ -30,7 +30,7 @@ def _passage(pid: str) -> Passage:
 @pytest.mark.parametrize(
     ("fixture", "model"),
     [
-        ("passage_arrkb.json", Passage),
+        ("passage_rerank.json", Passage),
         ("cited_answer.json", CitedAnswer),
         ("cited_answer_no_answer.json", CitedAnswer),
         ("quality_report_uncited.json", QualityReport),

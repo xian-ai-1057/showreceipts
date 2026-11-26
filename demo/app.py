@@ -27,8 +27,8 @@ from showreceipts import (
 from showreceipts.cli import default_generator
 
 INDEX_HTML = Path(__file__).parent / "index.html"
-RICHART_PASSAGES = Path(__file__).parents[1] / "data" / "richart_passages.json"
-RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+LUMEN_PASSAGES = Path(__file__).parents[1] / "data" / "lumen_passages.json"
+LUMEN_MD = Path(__file__).parents[1] / "data" / "lumen.md"
 
 
 class PostprocessRequest(BaseModel):
@@ -93,13 +93,13 @@ def create_app(generator: Generator | None = None) -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(INDEX_HTML, media_type="text/html")
 
-    @app.get("/samples/richart_passages.json", include_in_schema=False)
-    def richart_passages() -> FileResponse:
-        return FileResponse(RICHART_PASSAGES, media_type="application/json")
+    @app.get("/samples/lumen_passages.json", include_in_schema=False)
+    def lumen_passages() -> FileResponse:
+        return FileResponse(LUMEN_PASSAGES, media_type="application/json")
 
-    @app.get("/samples/richart.md", include_in_schema=False)
-    def richart_markdown() -> FileResponse:
-        return FileResponse(RICHART_MD, media_type="text/markdown; charset=utf-8")
+    @app.get("/samples/lumen.md", include_in_schema=False)
+    def lumen_markdown() -> FileResponse:
+        return FileResponse(LUMEN_MD, media_type="text/markdown; charset=utf-8")
 
     @app.post("/split")
     def split_endpoint(request: SplitRequest) -> list[Passage]:

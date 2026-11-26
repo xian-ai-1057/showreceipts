@@ -3,7 +3,7 @@
 demo 前端（`demo/index.html`）沒有自動化測試，依 #9 的 Testing Decisions 以手動 UAT 驗收。驗收項目來自 #20 的留言：
 
 - 貼上模式問兩題，題目是 Spec 106 AC #27(b) 的兩題。
-- 上傳模式用 `data/richart.md` 問一題。
+- 上傳模式用 `data/lumen.md` 問一題。
 - 每個 `[n]` 都要點開，查證側欄原文確實支持該句。
 
 本紀錄分兩部分：
@@ -36,9 +36,9 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 
 | # | 模式 | 問題 | 通過條件 | 結果 |
 |---|---|---|---|---|
-| R1 | 貼上（預填 Richart 樣本） | 切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？ | 答出 3.8% 與「LINE Pay 在超商無回饋」；每個 `[n]` 的側欄原文都支持該句 | 通過。答「最高可享 3.8%」與「在超商使用 LINE Pay 沒有加碼回饋」 |
-| R2 | 貼上（預填 Richart 樣本） | 繳保費可以拿到多少回饋？切換假日刷呢？ | 答出免切換 1.3%、切換假日刷最高 2%；每個 `[n]` 的側欄原文都支持該句 | 通過。答免切換 1.3%、切換假日刷最高 2%，另補一句不適用的保費類型 |
-| R3 | 上傳 `data/richart.md` | Richart 卡正卡年費多少？一般消費的回饋是多少？ | 答出 NT$4,500 與 0.3%；側欄的 Locator 是標題路徑；每個 `[n]` 的側欄原文都支持該句 | 通過。答 NT$4,500 與 0.3%；Locator 為 `二、年費辦法`、`四、保費與一般消費 > 一般消費 0.3%`。CLI 結果相同 |
+| R1 | 貼上（預填 Lumen 樣本） | 切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？ | 答出 3.8% 與「LINE Pay 在超商無回饋」；每個 `[n]` 的側欄原文都支持該句 | 通過。答「最高可享 3.8%」與「在超商使用 LINE Pay 沒有加碼回饋」 |
+| R2 | 貼上（預填 Lumen 樣本） | 繳保費可以拿到多少回饋？切換假日刷呢？ | 答出免切換 1.3%、切換假日刷最高 2%；每個 `[n]` 的側欄原文都支持該句 | 通過。答免切換 1.3%、切換假日刷最高 2%，另補一句不適用的保費類型 |
+| R3 | 上傳 `data/lumen.md` | Lumen 卡正卡年費多少？一般消費的回饋是多少？ | 答出 NT$4,500 與 0.3%；側欄的 Locator 是標題路徑；每個 `[n]` 的側欄原文都支持該句 | 通過。答 NT$4,500 與 0.3%；Locator 為 `二、年費辦法`、`四、保費與一般消費 > 一般消費 0.3%`。CLI 結果相同 |
 | R4 | R1–R3 共同 | — | Quality Report 的底色、虛線、紅字標示與答案內容相符 | 通過，見下方觀察 1。三題都是 2/2 句達門檻、quality_score 1.00；R3 的「2026 年」標紅字 |
 | R5 | R1–R3 共同 | — | 展開「原始答案 vs. 處理後答案」，列出的 Fabricated Marker 確實已從答案刪除；若模型沒寫錯編號，清單為空 | 通過。三題 Fabricated Marker 都是 0 個；R2、R3 的原始編號（`[4][2]`、`[4]`／`[11]`）正確重編成 `[1]`、`[2]` |
 | R6 | R1–R3 共同 | — | 終端與畫面都沒有印出 API key | 通過。頁面 HTML、CLI 的 stdout／stderr、uvicorn log 都不含 key |
@@ -49,13 +49,13 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 
 | # | 支持答案的 Passage |
 |---|---|
-| R1 | `…054735`（「於四大超商繫結臺新 Pay 享最高 3.8%（注意: LINE Pay 超商無回饋）」）；`…054657`（「切換【Pay 著刷】方案享最高 3.8%」） |
+| R1 | `…054735`（「於四大超商繫結範例 Pay 享最高 3.8%（注意: LINE Pay 超商無回饋）」）；`…054657`（「切換【Pay 著刷】方案享最高 3.8%」） |
 | R2 | `…054734`（「保費免切換 1.3%」）；`…054735`（「保費切換『假日刷』享 2% 回饋嗎？…可享最高 2% 回饋」） |
 | R3 | `二、年費辦法`（「正卡每卡每年 NT$4,500」）；`四、保費與一般消費 > 一般消費 0.3%`（「一般消費享 0.3% … 回饋無上限」） |
 
 ### 每個 `[n]` 的查證紀錄
 
-每題的每個 `[n]` 各一列。R1、R2 的 Source 是 `20260312【信用卡】115年上半年台新Richart卡權益 .docx.txt`，Locator 都是 `第 1 頁`。
+每題的每個 `[n]` 各一列。R1、R2 的 Source 是 `Lumen卡權益說明.docx.txt`，Locator 都是 `第 1 頁`。
 
 | # | `[n]` | 側欄的 Source · Locator · Passage ID | 原文是否支持該句 |
 |---|---|---|---|
@@ -63,13 +63,13 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 | R1 | [2] | 第 1 頁 · `…054735` | 是：「（注意: LINE Pay 超商無回饋）」。答案寫「沒有加碼回饋」，比原文的「無回饋」弱一點，但不算錯 |
 | R2 | [1] | 第 1 頁 · `…054734` | 是：「保費免切換 1.3%」，以及不回饋的保費類型（「薦繳保費」是原文用字） |
 | R2 | [2] | 第 1 頁 · `…054735` | 是：「保費免切換免領券直接可享 1.3% 回饋, 但若切換假日刷, 可享最高 2% 回饋」 |
-| R3 | [1] | richart.md · 二、年費辦法 · `6b32fff5b9ee:3` | 是：「正卡每卡每年 NT$4,500」 |
-| R3 | [2] | richart.md · 四、保費與一般消費 > 一般消費 0.3% · `6b32fff5b9ee:10` | 是：「一般消費享 0.3% … 回饋無上限，不回饋專案詳注意事項」 |
+| R3 | [1] | lumen.md · 二、年費辦法 · `6b32fff5b9ee:3` | 是：「正卡每卡每年 NT$4,500」 |
+| R3 | [2] | lumen.md · 四、保費與一般消費 > 一般消費 0.3% · `6b32fff5b9ee:10` | 是：「一般消費享 0.3% … 回饋無上限，不回饋專案詳注意事項」 |
 
 ### 觀察
 
 1. **「2026 年」被標成來源裡找不到的日期（R3）**。原文寫的是 `2026/1/1～2026/12/31`，DATE 實體以字面子字串比對，`2026 年` 對不上。這是現行規則的已知限制，不是答案錯；要改得先決定 DATE 是否正規化。
-2. **模型答案裡的 Markdown 粗體以原樣顯示（R2）**。`gpt-6-luna` 會寫 `**1.3% 臺新 Point 回饋**`，demo 以文字節點顯示答案，不渲染 Markdown，所以畫面上看得到 `**`。
+2. **模型答案裡的 Markdown 粗體以原樣顯示（R2）**。`gpt-6-luna` 會寫 `**1.3% 範例 Point 回饋**`，demo 以文字節點顯示答案，不渲染 Markdown，所以畫面上看得到 `**`。
 
 ## 模擬檢查（假 Generator）
 
@@ -114,14 +114,14 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 
 | 檢查項 | 貼上 | 上傳 | 觀察到的畫面 |
 |---|---|---|---|
-| 進入模式時的預設內容 | 通過 | 通過 | 貼上：切到貼上模式，輸入框預填的 JSON 等於 `data/richart_passages.json`（6 段）。上傳：預設就是上傳模式，預選 repo 附的 `richart.md`，重新整理後問答清空。 |
-| 以檔案選擇器上傳 | — | 通過 | 選 `data/richart.md` 後，顯示「目前的 Document：richart.md，6,022 bytes」 |
+| 進入模式時的預設內容 | 通過 | 通過 | 貼上：切到貼上模式，輸入框預填的 JSON 等於 `data/lumen_passages.json`（6 段）。上傳：預設就是上傳模式，預選 repo 附的 `lumen.md`，重新整理後問答清空。 |
+| 以檔案選擇器上傳 | — | 通過 | 選 `data/lumen.md` 後，顯示「目前的 Document：lumen.md，6,022 bytes」 |
 | 預覽切段 | — | 通過 | 列出 15 段，每段有 Locator（標題路徑）、字數與 Passage ID，例如「一、卡片介紹 > 卡片名稱 · 57 字 · 6b32fff5b9ee:0」 |
-| 送出問題時的請求內容 | 通過 | 通過 | `/answer` 回 200。貼上：請求帶 6 段 `passages`、不帶 `document`。上傳：請求帶 `document`（richart.md 的 base64）、不帶 `passages` |
-| 上傳模式的 Passage 來自 split | — | 通過 | 被引用的 Passage ID 是「文件 sha256 前 12 碼:序號」，Source 是 `richart.md`，Locator 是標題路徑 |
+| 送出問題時的請求內容 | 通過 | 通過 | `/answer` 回 200。貼上：請求帶 6 段 `passages`、不帶 `document`。上傳：請求帶 `document`（lumen.md 的 base64）、不帶 `passages` |
+| 上傳模式的 Passage 來自 split | — | 通過 | 被引用的 Passage ID 是「文件 sha256 前 12 碼:序號」，Source 是 `lumen.md`，Locator 是標題路徑 |
 | 答案中只有有效的 `[n]` 可點 | 通過 | 通過 | 答案裡只有 `[1]`、`[2]` 兩個按鈕，處理後答案不含 99 與 `[3-1]` |
 | 點答案中的 `[1]` 開側欄 | 通過 | 通過 | 側欄標題「引用 [1]」，Source、Locator、Passage ID 與原文都等於第 1 段。貼上模式另有 Score（0.98095703125）；上傳模式沒有 score，不顯示 Score 列 |
-| 點 `[2]` 換段 | 通過 | 通過 | 側欄換成第 2 段（貼上 `…054735`；上傳 `一、卡片介紹 > 臺新信用卡切換刷平臺`），反白從 `[1]` 移到 `[2]` |
+| 點 `[2]` 換段 | 通過 | 通過 | 側欄換成第 2 段（貼上 `…054735`；上傳 `一、卡片介紹 > 範例銀行信用卡切換刷平臺`），反白從 `[1]` 移到 `[2]` |
 | 答案下方的引用清單 | 通過 | 通過 | 列出 `[1]`、`[2]` 與各自的 Source（Locator）；點清單裡的 `[1]` 也會開側欄 |
 | 原始答案 vs. 處理後答案 | 通過 | 通過 | 預設收合，點開後左右對照：原始答案含 `[2, 99]`、`[3-1]`，處理後答案不含 |
 | 被刪除的 Fabricated Marker 清單 | 通過 | 通過 | 摘要寫「刪除的 Fabricated Marker：2 個」，清單是 `[2, 99]`、`[3-1]` |
@@ -134,5 +134,5 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 | 輸入錯誤（422）的錯誤訊息 | 通過 | 通過 | 貼上：Passage 的 `id` 為空時顯示「輸入有誤（HTTP 422）：body.passages.0.id：String should have at least 1 character」。上傳：不是 UTF-8 的 `.txt` 顯示「輸入有誤（HTTP 422）：bad.txt is not UTF-8 text: …」 |
 | 不支援的格式 | — | 通過 | 對 `.xlsx` 按「預覽切段」，顯示「輸入有誤（HTTP 422）：unsupported document format for 'table.xlsx'; supported: .md, .txt, .pdf, .docx」 |
 | 輸入框不是 JSON | 通過 | — | 送出前就顯示「Passage JSON 格式錯誤：…」 |
-| 重新載入範例 | 通過 | 通過 | 貼上：「重新載入 Richart 樣本」還原輸入框。上傳：「改用範例 richart.md」換回範例文件 |
+| 重新載入範例 | 通過 | 通過 | 貼上：「重新載入 Lumen 樣本」還原輸入框。上傳：「改用範例 lumen.md」換回範例文件 |
 | 全程沒有 JavaScript 錯誤 | 通過 | 通過 | 沒有 `pageerror`，也沒有 console error。刻意觸發 422／502 時，瀏覽器記下的 "Failed to load resource" 不計 |

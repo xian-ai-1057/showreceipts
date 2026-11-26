@@ -62,7 +62,7 @@ def test_quality_golden_cited_answer_reproduced(fake_generator) -> None:
     fake_generator.reply = golden["raw_answer"]
 
     via_postprocess = postprocess(golden["raw_answer"], passages)
-    via_answer = answer("Richart 卡的回饋是多少？", passages, fake_generator)
+    via_answer = answer("Lumen 卡的回饋是多少？", passages, fake_generator)
 
     assert via_postprocess.model_dump(mode="json") == golden
     assert via_answer == via_postprocess
@@ -71,16 +71,16 @@ def test_quality_golden_cited_answer_reproduced(fake_generator) -> None:
 
 
 def test_quality_worked_example_low_overlap_and_missing_number_flagged() -> None:
-    passages = [_passage("a", "台新銀行 2024 年發卡 300 萬張。")]
+    passages = [_passage("a", "範例銀行 2024 年發卡 300 萬張。")]
 
-    cited = postprocess("台新銀行 2024 年發卡 300 萬張 [1]。同年營收達 100 億元 [1]。", passages)
+    cited = postprocess("範例銀行 2024 年發卡 300 萬張 [1]。同年營收達 100 億元 [1]。", passages)
 
     # 句 0 去掉 marker 後 20 個 3-gram 有 18 個在 Passage 裡；句 1 的 12 個只有「00 」在。
     assert cited.quality_report == QualityReport(
         quality_score=0.5,
         sentence_supports=[
             SentenceSupport(
-                sentence="台新銀行 2024 年發卡 300 萬張 [1]。",
+                sentence="範例銀行 2024 年發卡 300 萬張 [1]。",
                 supported=True,
                 best_match_passage_id="a",
                 overlap_score=0.9,

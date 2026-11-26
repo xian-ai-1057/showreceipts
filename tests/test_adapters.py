@@ -1,4 +1,4 @@
-"""Adapters：arrkb 結果與 LangChain 文件物件 → Passage。"""
+"""Adapters：rerank API 結果與 LangChain 文件物件 → Passage。"""
 
 import json
 import logging
@@ -8,12 +8,14 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
-from showreceipts.adapters import from_arrkb, from_langchain
+from showreceipts.adapters import from_langchain, from_rerank_response
 
 ROOT = Path(__file__).parent.parent
 SAMPLE = json.loads((ROOT / "data" / "sample_reranked.json").read_text(encoding="utf-8"))
-GOLDEN_PASSAGE = json.loads((ROOT / "tests" / "fixtures" / "golden" / "passage_arrkb.json").read_text(encoding="utf-8"))
-RICHART_PASSAGES = json.loads((ROOT / "data" / "richart_passages.json").read_text(encoding="utf-8"))
+GOLDEN_PASSAGE = json.loads(
+    (ROOT / "tests" / "fixtures" / "golden" / "passage_rerank.json").read_text(encoding="utf-8")
+)
+LUMEN_PASSAGES = json.loads((ROOT / "data" / "lumen_passages.json").read_text(encoding="utf-8"))
 
 
 def _record(context_id: str, *, score: float | None = None, **fields: object) -> dict[str, object]:
@@ -23,49 +25,49 @@ def _record(context_id: str, *, score: float | None = None, **fields: object) ->
     return record | fields
 
 
-def test_adapters_arrkb_sample_first_item_matches_golden_passage() -> None:
-    passages = from_arrkb(SAMPLE)
+def test_adapters_rerank_sample_first_item_matches_golden_passage() -> None:
+    passages = from_rerank_response(SAMPLE)
 
     assert passages[0].model_dump(mode="json") == GOLDEN_PASSAGE
 
 
-def test_adapters_arrkb_sample_equals_demo_richart_passages() -> None:
-    passages = from_arrkb(SAMPLE)
+def test_adapters_rerank_sample_equals_demo_lumen_passages() -> None:
+    passages = from_rerank_response(SAMPLE)
 
-    assert [p.model_dump(mode="json") for p in passages] == RICHART_PASSAGES
+    assert [p.model_dump(mode="json") for p in passages] == LUMEN_PASSAGES
 
 
-def test_adapters_arrkb_envelope_list_and_single_record_accepted() -> None:
+def test_adapters_rerank_envelope_list_and_single_record_accepted() -> None:
     records = SAMPLE["data"]
 
-    from_envelope = from_arrkb(SAMPLE)
-    from_list = from_arrkb(records)
-    from_single = from_arrkb(records[2])
+    from_envelope = from_rerank_response(SAMPLE)
+    from_list = from_rerank_response(records)
+    from_single = from_rerank_response(records[2])
 
     assert from_list == from_envelope
     assert from_single == [from_envelope[2]]
 
 
-def test_adapters_arrkb_order_kept_not_sorted_by_score() -> None:
+def test_adapters_rerank_order_kept_not_sorted_by_score() -> None:
     records = [_record("low", score=0.1), _record("high", score=0.9), _record("mid", score=0.5)]
 
-    passages = from_arrkb(records)
+    passages = from_rerank_response(records)
 
     assert [p.id for p in passages] == ["low", "high", "mid"]
     assert [p.score for p in passages] == [0.1, 0.9, 0.5]
 
 
 @pytest.mark.parametrize("key", ["context_id", "content"])
-def test_adapters_arrkb_missing_required_field_raises_value_error(key: str) -> None:
+def test_adapters_rerank_missing_required_field_raises_value_error(key: str) -> None:
     broken = _record("b")
     del broken[key]
 
-    with pytest.raises(ValueError, match=f"arrkb item 1: missing '{key}'"):
-        from_arrkb([_record("a"), broken])
+    with pytest.raises(ValueError, match=f"rerank API item 1: missing '{key}'"):
+        from_rerank_response([_record("a"), broken])
 
 
-def test_adapters_arrkb_optional_fields_missing_fall_back() -> None:
-    passage = from_arrkb({"context_id": 42, "content": "內文", "kb_name": "kb", "rerank": {"rank": 3}})[0]
+def test_adapters_rerank_optional_fields_missing_fall_back() -> None:
+    passage = from_rerank_response({"context_id": 42, "content": "內文", "kb_name": "kb", "rerank": {"rank": 3}})[0]
 
     assert passage.model_dump(mode="json") == {
         "id": "42",
@@ -81,8 +83,8 @@ def test_adapters_arrkb_optional_fields_missing_fall_back() -> None:
     ("page", "locator"),
     [("1", "第 1 頁"), (" 7 ", "第 7 頁"), (0, "第 0 頁"), ("", ""), ("  ", ""), (None, "")],
 )
-def test_adapters_arrkb_page_becomes_locator(page: object, locator: str) -> None:
-    passage = from_arrkb(_record("a", page=page))[0]
+def test_adapters_rerank_page_becomes_locator(page: object, locator: str) -> None:
+    passage = from_rerank_response(_record("a", page=page))[0]
 
     assert passage.locator == locator
     assert passage.metadata["page"] == page

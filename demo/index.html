@@ -151,18 +151,18 @@
         <legend>上傳 Document</legend>
         <input type="file" id="document-file" accept=".md,.txt,.pdf,.docx" aria-label="選擇 Document 檔案">
         <p id="document-info" class="hint"></p>
-        <button type="button" id="load-richart-md" class="small">改用範例 richart.md</button>
+        <button type="button" id="load-lumen-md" class="small">改用範例 lumen.md</button>
         <button type="button" id="preview-split" class="small">預覽切段</button>
         <ol id="split-preview" class="split-preview" hidden></ol>
       </fieldset>
       <fieldset id="paste-mode" hidden>
         <legend>Passage JSON</legend>
         <textarea id="passages-json" rows="14" spellcheck="false" aria-label="Passage JSON"></textarea>
-        <button type="button" id="load-sample" class="small">重新載入 Richart 樣本</button>
+        <button type="button" id="load-sample" class="small">重新載入 Lumen 樣本</button>
       </fieldset>
       <label for="question">問題</label>
       <div class="row">
-        <input type="text" id="question" required placeholder="例：Richart 卡的年費是多少？">
+        <input type="text" id="question" required placeholder="例：Lumen 卡的年費是多少？">
         <button type="submit" id="submit">提問</button>
       </div>
       <p id="status" hidden>等待 Generator 回覆…</p>
@@ -185,8 +185,8 @@
 <script>
 "use strict";
 
-const SAMPLE_URL = "/samples/richart_passages.json";
-const SAMPLE_DOCUMENT_URL = "/samples/richart.md";
+const SAMPLE_URL = "/samples/lumen_passages.json";
+const SAMPLE_DOCUMENT_URL = "/samples/lumen.md";
 const $ = (id) => document.getElementById(id);
 let turnCount = 0;
 let currentDocument = null;  // { name, blob, sample }：上傳模式送出的 Document
@@ -291,7 +291,7 @@ async function loadSample() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     $("passages-json").value = await response.text();
   } catch (error) {
-    showError(`無法載入 Richart 樣本：${error.message}`);
+    showError(`無法載入 Lumen 樣本：${error.message}`);
   }
 }
 
@@ -300,9 +300,9 @@ async function loadSampleDocument() {
     const response = await fetch(SAMPLE_DOCUMENT_URL);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     $("document-file").value = "";
-    setDocument({ name: "richart.md", blob: await response.blob(), sample: true });
+    setDocument({ name: "lumen.md", blob: await response.blob(), sample: true });
   } catch (error) {
-    showError(`無法載入範例 richart.md：${error.message}`);
+    showError(`無法載入範例 lumen.md：${error.message}`);
   }
 }
 
@@ -577,7 +577,7 @@ function showPassage({ n, passage }, button) {
 
 $("ask-form").addEventListener("submit", ask);
 $("load-sample").addEventListener("click", loadSample);
-$("load-richart-md").addEventListener("click", loadSampleDocument);
+$("load-lumen-md").addEventListener("click", loadSampleDocument);
 $("preview-split").addEventListener("click", previewSplit);
 $("document-file").addEventListener("change", (event) => {
   const [file] = event.target.files;

@@ -29,7 +29,7 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 - **模型端點設定**：`cli.default_generator` 讀 `SHOWRECEIPTS_BASE_URL`、`SHOWRECEIPTS_MODEL`、`SHOWRECEIPTS_API_KEY`、`SHOWRECEIPTS_TEMPERATURE`（`default` 表示不送 temperature），CLI、demo、LangChain 範例共用。核心套件不讀環境變數或 `.env`。
 - **demo 前端的 `citationMarkers`（`index.html` 的 `<markers-port>` 區塊）是 `markers.py` 豁免判定的逐步移植**。`tests/test_demo_page.py` 用 node 拿 `test_markers.py` 的表格與隨機答案比對兩者；改了豁免規則、這個測試紅了，就同步改 `index.html`。
 - **頂層 `__all__`** 是四個操作、`Selector`／`Generator` 型別與資料模型（清單由 `test_isolation.py` 釘住）。`showreceipts.adapters`、`quality.build_quality_report`、`prompts.build_prompt` 從子模組匯入。
-- `data/richart_passages.json` 必須等於 `from_arrkb(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。arrkb 欄位對應改了就用 adapter 重新產生這個檔案。
+- `data/lumen_passages.json` 必須等於 `from_rerank_response(data/sample_reranked.json)`（`tests/test_adapters.py` 檢查）。rerank API 欄位對應改了就用 adapter 重新產生這個檔案。
 
 ## 模組地圖
 
@@ -45,12 +45,12 @@ _finalize = markers.resolve（正規化、重編號、刪 Fabricated Marker）�
 | `src/showreceipts/quality.py` | `build_quality_report`：句切分、3-gram 支持度、NUM／DATE 實體、Uncited Sentence |
 | `src/showreceipts/selector.py` | `Selector` 型別、`select`（字元 bigram BM25，超過預算才挑） |
 | `src/showreceipts/splitter.py` | `split`：Markdown／純文字／PDF／DOCX reader 與共用的切段邏輯 |
-| `src/showreceipts/adapters.py` | `from_arrkb`、`from_langchain`（duck typing，不 import LangChain） |
+| `src/showreceipts/adapters.py` | `from_rerank_response`、`from_langchain`（duck typing，不 import LangChain） |
 | `src/showreceipts/cli.py` | `main(argv=None, *, generator=None) -> int`、`default_generator`；console script `showreceipts` |
 | `demo/app.py` | FastAPI `create_app(generator=None)`；HTTP 請求模型（不屬於契約）也在這裡 |
 | `demo/index.html` | 單一 HTML 前端，原生 JS／CSS，無 build |
 | `examples/langchain_postprocess.py` | LangChain 0-based 答案 → `postprocess(input_marker_base=0)` |
-| `data/` | `sample_reranked.json`（arrkb 樣本）、`richart_passages.json`（貼上模式預填）、`richart.md`（上傳模式範例） |
+| `data/` | `sample_reranked.json`（rerank API 樣本）、`lumen_passages.json`（貼上模式預填）、`lumen.md`（上傳模式範例） |
 | `docs/uat-v1.md` | v1 UAT 紀錄（真模型與假 Generator 模擬檢查） |
 | `specs/archive/` | Tier 2 時期的 Spec 100–106，只供參考 |
 
