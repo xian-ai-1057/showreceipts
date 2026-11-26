@@ -15,7 +15,7 @@ import pytest
 from showreceipts import Passage, split
 
 DOCS = Path(__file__).parent / "fixtures" / "docs"
-RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+LUMEN_MD = Path(__file__).parents[1] / "data" / "lumen.md"
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 
@@ -188,7 +188,7 @@ def test_split_unsupported_path_is_rejected_before_reading_the_file(tmp_path: Pa
 
 def test_split_text_that_is_not_utf8_raises_clear_error() -> None:
     with pytest.raises(ValueError, match=r"big5\.txt is not UTF-8 text"):
-        split(("臺新".encode("big5"), "big5.txt"))
+        split(("範例銀行".encode("big5"), "big5.txt"))
 
 
 def test_split_empty_document_gives_no_passages() -> None:
@@ -200,12 +200,12 @@ def test_split_target_chars_below_one_raises() -> None:
         split(DOCS / "tiny.txt", target_chars=0)
 
 
-def test_split_richart_sample_gives_several_passages_located_by_heading_path() -> None:
-    passages = split(RICHART_MD)
+def test_split_lumen_sample_gives_several_passages_located_by_heading_path() -> None:
+    passages = split(LUMEN_MD)
 
     assert len(passages) >= 6
     assert all(0 < len(p.text) <= 500 for p in passages)
-    assert all(p.source == "richart.md" for p in passages)
+    assert all(p.source == "lumen.md" for p in passages)
     assert "三、切換刷方案 > 假日刷" in {p.locator for p in passages}
 
 
@@ -378,7 +378,7 @@ def _docx_of_another_office_type() -> bytes:
 
 def test_split_docx_locator_is_heading_path() -> None:
     data = _tiny_docx(
-        ("p", "Richart 卡說明。"),
+        ("p", "Lumen 卡說明。"),
         ("h", 1, "三、費用"),
         ("p", "費用總覽。"),
         ("h", 2, "年費"),
@@ -396,7 +396,7 @@ def test_split_docx_locator_is_heading_path() -> None:
     passages = split((data, "tiny.docx"))
 
     assert [(p.locator, p.text) for p in passages] == [
-        ("", "Richart 卡說明。"),
+        ("", "Lumen 卡說明。"),
         ("三、費用", "費用總覽。"),
         ("三、費用 > 年費", "正卡年費 NT$4,500。\n\n消費滿 12 次免年費。"),
         ("三、費用 > 年費 > 附卡", "附卡免年費。"),

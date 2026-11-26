@@ -6,16 +6,16 @@ import pytest
 
 from showreceipts import Passage, select, split
 
-RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+LUMEN_MD = Path(__file__).parents[1] / "data" / "lumen.md"
 
-FEE = Passage(id="fee", text="年費每年新臺幣四千五百元整。", source="richart.md")
-INSURANCE = Passage(id="insurance", text="保費一次付清可享回饋。", source="richart.md")
-HOLIDAY = Passage(id="holiday", text="假日刷不限通路可享回饋。", source="richart.md")
-SWITCH = Passage(id="switch", text="保費回饋：切換假日刷最高。", source="richart.md")
+FEE = Passage(id="fee", text="年費每年新臺幣四千五百元整。", source="lumen.md")
+INSURANCE = Passage(id="insurance", text="保費一次付清可享回饋。", source="lumen.md")
+HOLIDAY = Passage(id="holiday", text="假日刷不限通路可享回饋。", source="lumen.md")
+SWITCH = Passage(id="switch", text="保費回饋：切換假日刷最高。", source="lumen.md")
 
 
 def _passage(pid: str, text: str) -> Passage:
-    return Passage(id=pid, text=text, source="richart.md")
+    return Passage(id=pid, text=text, source="lumen.md")
 
 
 def test_select_within_budget_returns_passages_unchanged() -> None:
@@ -35,14 +35,14 @@ def test_select_over_budget_keeps_most_relevant_in_original_order() -> None:
 
 
 def test_select_over_budget_question_matching_only_locator_scores_above_unrelated() -> None:
-    fee = Passage(id="fee", text="正卡每卡每年新臺幣四千五百元。", source="richart.md", locator="二、年費辦法")
-    design = Passage(id="design", text="卡面設計共有三款可選。", source="richart.md", locator="一、卡片介紹")
+    fee = Passage(id="fee", text="正卡每卡每年新臺幣四千五百元。", source="lumen.md", locator="二、年費辦法")
+    design = Passage(id="design", text="卡面設計共有三款可選。", source="lumen.md", locator="一、卡片介紹")
 
     assert select("年費多少？", [design, fee], len(fee.text)) == [fee]
 
 
 def test_select_split_markdown_over_budget_keeps_section_named_by_question() -> None:
-    passages = split(RICHART_MD)
+    passages = split(LUMEN_MD)
 
     selected = select("年費多少？", passages, 200)
 

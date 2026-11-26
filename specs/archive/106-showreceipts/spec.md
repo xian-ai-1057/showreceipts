@@ -8,14 +8,14 @@
 
 ## 1. Context
 
-Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除編造編號、句級品質檢查）已在 demo 中驗證，但它和本地 RAG 綁死，無法放到 production arrkb 或其他 RAG 框架後面用。痛點：
+Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除編造編號、句級品質檢查）已在 demo 中驗證，但它和本地 RAG 綁死，無法放到 正式 RAG 系統 或其他 RAG 框架後面用。痛點：
 
-1. **生成與後處理綁在 LangChain + Chroma 上**：`src/rag_chain.py` import `langchain_core.messages`，`src/llm.py` 建 `ChatOpenAI`；工作型別 `RetrievedChunk` 的欄位（`context_id` / `file_id` / `filename` / `page` / `chunk_index`）是 Chroma / arrkb 專屬，arrkb 路徑只好在 `to_retrieved_chunk()` 把 `chunk_index` 填假值 0。LlamaIndex、Haystack 或自研 arrkb 若要用，得多帶整套 LangChain。
+1. **生成與後處理綁在 LangChain + Chroma 上**：`src/rag_chain.py` import `langchain_core.messages`，`src/llm.py` 建 `ChatOpenAI`；工作型別 `RetrievedChunk` 的欄位（`context_id` / `file_id` / `filename` / `page` / `chunk_index`）是 Chroma / rerank API 專屬，rerank API 路徑只好在 `to_retrieved_chunk()` 把 `chunk_index` 填假值 0。LlamaIndex、Haystack 或自研檢索系統 若要用，得多帶整套 LangChain。
 2. **只認 `[n]` 一種標記**：`src/utils.py::CITE_RE = \[(\d+)\]`。小模型常輸出 `[1, 2]`、`[1-3]`、`[1、3]`，這些既不會計入 Citation，也不會被當成 Fabricated Marker 移除，原樣留在答案裡（調查文件「可借鏡的做法」第 1 點）。
 3. **品質檢查漏掉「有數字卻沒標來源」的句子**：Spec 104 只對有 marker 的句子算 3-gram 支持度、對實體做 substring 檢查；一句「一般消費回饋為 0.3%。」沒有任何 marker，數字又剛好在某段資料裡：實體檢查不會標它，句級檢查只把它算成一般的 unsupported，和「有標來源但重疊度低」的句子無從區分（groundcite 的覆蓋率做法，調查文件第 2 點）。
 4. **沒有「只做後處理」的入口**：LlamaIndex CitationQueryEngine、LangChain 產生的答案無法交給本專案做正規化、重編號、移除 Fabricated Marker 與品質檢查。
 5. **介面文字寫死在核心流程**：空檢索時 `query()` 回「依現有資料無法回答：知識庫目前是空的，請先在「文件管理」分頁上傳文件。」——「上傳文件」是 Streamlit 介面的概念，不該出現在可接任何框架的模組裡。
-6. **外部 Passage 被誤標為過期**：`app.py::render_citations` 以「Chroma 查不到」判斷 stale，外部注入的 arrkb Passage 本來就不在 Chroma，因此每筆都被加上「⚠️ 文件已更新或被刪除」。
+6. **外部 Passage 被誤標為過期**：`app.py::render_citations` 以「Chroma 查不到」判斷 stale，外部注入的 rerank API Passage 本來就不在 Chroma，因此每筆都被加上「⚠️ 文件已更新或被刪除」。
 
 本 spec 把「檢索之後」的那一段抽成 repo 內的獨立子套件 **`src/showreceipts/`**（D1、D8、D9）：輸入是 Passage 清單，模型以注入的 Generator 呼叫，模組只依賴 Pydantic v2。本地檢索、loaders、chunking、Chroma、對話歷史與 Streamlit 降為 Demo Host（D4）。目標是內部 demo（D2）；IT 移交與抽套件之後再做。
 
@@ -36,10 +36,10 @@ Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除
   - No-Answer Reply（D16）
   - Quality Report：自 `src/eval/` 移入、預設開啟、只報不攔，新增 Uncited Sentence 檢查（D7、D12、D13）
   - `Generator` 型別與預設的 OpenAI 相容 Generator（stdlib 實作）（D5、D21）
-  - Adapter：arrkb dict、LangChain（duck typing，不 import langchain）（D6）
+  - Adapter：rerank API dict、LangChain（duck typing，不 import langchain）（D6）
   - import 隔離的自動化檢查（D8、D21）
-- Demo Host 調整（§4.15）：`src/rag_chain.py`、`src/llm.py`、`src/retrieval.py`、`src/utils.py`、`rag.py`、`src/history/`、`app.py`、新增 `src/citation_view/`、`examples/langchain_postprocess.py` 與 `data/demo/richart_sample.md`（§8 Q11）
-- Streamlit「外部檢索結果」模式：貼上 arrkb JSON（預填 `data/sample_reranked.json`），外部 Passage 的 Citation 顯示快照、不加 stale 標籤（D17）
+- Demo Host 調整（§4.15）：`src/rag_chain.py`、`src/llm.py`、`src/retrieval.py`、`src/utils.py`、`rag.py`、`src/history/`、`app.py`、新增 `src/citation_view/`、`examples/langchain_postprocess.py` 與 `data/demo/lumen_sample.md`（§8 Q11）
+- Streamlit「外部檢索結果」模式：貼上 rerank API JSON（預填 `data/sample_reranked.json`），外部 Passage 的 Citation 顯示快照、不加 stale 標籤（D17）
 - 對話歷史 `StoredCitation` v2（新契約於本 spec `contracts/demo_host_history_schema.py`）；舊 `data/history.sqlite` 不遷移（D27）
 - 契約：`contracts/showreceipts_schema.py`、`contracts/demo_host_history_schema.py` 與 golden fixtures
 - 文件：README、CLAUDE.md、`specs/plan.md`、`specs/CLAUDE.md` 目錄清單（D28）
@@ -80,7 +80,7 @@ Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除
 | D3 | 術語依 GLOSSARY.md | §3.3、§4.16 |
 | D4 | 模組只管檢索之後；其餘為 Demo Host | §3.1、§4.2 |
 | D5 | Generator 為注入 callable；不依賴 LangChain；預設 OpenAI 相容 Generator；prompt 組裝與後處理是 pure function | §3.2、§4.9、§4.12 |
-| D6 | 自訂 Passage + 各框架 Adapter（先 arrkb、LangChain） | §3.3、§4.13 |
+| D6 | 自訂 Passage + 各框架 Adapter（先 rerank API、LangChain） | §3.3、§4.13 |
 | D7 | 品質評估移入模組，選配、預設開啟 | §3.8、§4.11 |
 | D8 | repo 內隔離子套件，之後再抽 | §3.12、§4.14 |
 | D9 | 名稱 showreceipts，路徑 `src/showreceipts/`，模組與專案同名 | §3.1、§4.15.8、§8 Q13 |
@@ -102,14 +102,14 @@ Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除
 | D25 | Python 3.11+ | §3.12 |
 | D26 | demo 不做 streaming | §2 Out of scope |
 | D27 | 舊 history.sqlite 不遷移，Lead 手動刪 | §4.15.4、§7 |
-| D28 | demo 完成定義（三條路徑、Richart 問題、測試全綠、README） | §6 AC #25–#27、§8 Q11 |
+| D28 | demo 完成定義（三條路徑、Lumen 問題、測試全綠、README） | §6 AC #25–#27、§8 Q11 |
 
 ### 3.1 模組邊界：只管「檢索之後」
 
 **決定**：`src/showreceipts/` 負責且只負責：組編號 context → 呼叫 Generator → 解析、正規化、重編號 Citation Marker → 移除 Fabricated Marker → Quality Report（D4）。檢索、chunking、vector store、loaders、對話歷史與 Streamlit 都是 Demo Host。模組與專案同名 showreceipts（D9）。
 
 **為何**：
-- ADR-0001：實際要服務的是 arrkb 與其他未定框架，它們都已自帶檢索；本地檢索只是示範（D1）
+- ADR-0001：實際要服務的是 rerank API 與其他未定框架，它們都已自帶檢索；本地檢索只是示範（D1）
 - 邊界畫在「Passage 清單進、Cited Answer 出」，任何框架只要寫一個 Adapter 就能接
 
 **影響**：`src/citation.py`、`src/prompts.py`、`src/eval/`、`src/utils.py::CITE_RE` 移入模組；`src/rag_chain.py` 縮成 Demo Host 膠水（§4.2）。
@@ -140,12 +140,12 @@ Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除
 
 ### 3.3 Passage 是唯一輸入型別，框架知識只放在 Adapter
 
-**決定**：模組定義自己的 `Passage`（`id` / `text` / `source` / `locator` / `score` / `metadata`，D20），先提供 arrkb dict 與 LangChain 兩個 Adapter（D6）。術語一律依 GLOSSARY.md（D3），舊名對照見 §4.16。
+**決定**：模組定義自己的 `Passage`（`id` / `text` / `source` / `locator` / `score` / `metadata`，D20），先提供 rerank API dict 與 LangChain 兩個 Adapter（D6）。術語一律依 GLOSSARY.md（D3），舊名對照見 §4.16。
 
 **為何**：GLOSSARY「Adapter：引用層對外部框架的所有認識都只存在於 Adapter」；`RetrievedChunk` 的 `chunk_index`、`file_id` 對多數框架沒有意義。
 
 **影響**：
-- `RetrievedChunk`、`to_retrieved_chunk()`、`coerce_reranked()` 刪除；arrkb 的 `RerankedChunk` 留在 Demo Host，作為本地 `retrieve()` 模擬 production 輸出的型別
+- `RetrievedChunk`、`to_retrieved_chunk()`、`coerce_reranked()` 刪除；rerank API 的 `RerankedChunk` 留在 Demo Host，作為本地 `retrieve()` 模擬 production 輸出的型別
 - DTO 名稱採 GLOSSARY 名（`Passage`、`CitedAnswer`），不套 `specs/CLAUDE.md` §6 的 `<Feature>DTO` 命名慣例——D3 優先
 
 ### 3.4 恰好兩個公開入口，選項集中於一個設定物件
@@ -263,10 +263,10 @@ Tier 2 的 citation 能力（`[n]` 引用、首次出現順序重編號、移除
 ### 3.14 Demo Host：外部檢索結果模式、LangChain 範例、無 streaming
 
 **決定**：
-- Streamlit 問答分頁新增「檢索來源」切換：本地知識庫／外部檢索結果（貼上 arrkb JSON，預填 `data/sample_reranked.json`）（D17）
+- Streamlit 問答分頁新增「檢索來源」切換：本地知識庫／外部檢索結果（貼上 rerank API JSON，預填 `data/sample_reranked.json`）（D17）
 - 外部 Passage 的 Citation 只顯示快照，不反查 Chroma、不加「⚠️ 文件已更新或被刪除」（D17）
 - 新增 `examples/langchain_postprocess.py`：LangChain 產生 0-based 答案 → `postprocess()`（D17、D28 第三條路徑）
-- 新增 `data/demo/richart_sample.md`（由 `data/sample_reranked.json` 產生並 commit），供本地知識庫路徑入庫後問 Richart 問題（D28；暫定，§8 Q11）
+- 新增 `data/demo/lumen_sample.md`（由 `data/sample_reranked.json` 產生並 commit），供本地知識庫路徑入庫後問 Lumen 問題（D28；暫定，§8 Q11）
 - 答案生成完才顯示，無 streaming（D26）
 - 舊 `data/history.sqlite` 不遷移（D27）
 
@@ -321,8 +321,8 @@ src/showreceipts/
 │   ├── uncited.py         # find_uncited_sentences()（新）
 │   └── report.py          # build_quality_report()（原 src/eval/report.py::evaluate）
 └── adapters/
-    ├── __init__.py        # from_arrkb / from_langchain（含 __all__）
-    ├── arrkb.py
+    ├── __init__.py        # from_rerank_response / from_langchain（含 __all__）
+    ├── rerank API.py
     └── langchain_docs.py  # duck typing，不 import langchain
 ```
 
@@ -338,8 +338,8 @@ src/showreceipts/
 | `src/prompts.py` | `src/showreceipts/prompts.py` | 原檔刪除；刪除前於步驟 4 凍結 Tier 1 snapshot 檔（§7） |
 | `src/utils.py::CITE_RE` | `src/showreceipts/markers.py::_SINGLE_MARKER_RE` | `utils.py` 只留 `preview`（Demo Host 用） |
 | `src/eval/*` | `src/showreceipts/quality/*` | 原目錄刪除 |
-| `src/retrieval.py::RetrievedChunk` / `to_retrieved_chunk` / `coerce_reranked` | 刪除 | 由 `Passage` + `from_arrkb` 取代 |
-| `src/retrieval.py::RerankedChunk` / `RerankedKwargs` / `retrieve` | 留在 Demo Host | 本地檢索仍輸出 arrkb schema；`query()` 仍接受 `RerankedChunk` 實例 |
+| `src/retrieval.py::RetrievedChunk` / `to_retrieved_chunk` / `coerce_reranked` | 刪除 | 由 `Passage` + `from_rerank_response` 取代 |
+| `src/retrieval.py::RerankedChunk` / `RerankedKwargs` / `retrieve` | 留在 Demo Host | 本地檢索仍輸出 rerank API schema；`query()` 仍接受 `RerankedChunk` 實例 |
 | `src/rag_chain.py::RagAnswer` / `CitedChunkRef` | 刪除 | 由 `CitedAnswer` / `StoredCitation` v2 取代 |
 | `src/rag_chain.py::query` | 留在 Demo Host（膠水） | 回傳 `CitedAnswer`（§4.15.2） |
 | `src/llm.py::_get_llm`（ChatOpenAI） | 改為 `get_generator()` | 不再 import `langchain_openai`（§4.15.1） |
@@ -349,7 +349,7 @@ src/showreceipts/
 | `tests/fixtures/snapshots/eval_*.json` | 新增 `quality_supported.json` / `quality_unsupported.json`（步驟 3）；舊檔於步驟 6.5 刪除 | §5.4 |
 | `src/config.py`、`src/logging_setup.py`、`src/loaders/`、`src/chunking.py`、`src/vectorstore.py`、`src/ingest.py` | 不動 | Demo Host |
 | — | `examples/langchain_postprocess.py`（新） | Demo Host，可 import langchain |
-| — | `data/demo/richart_sample.md`（新） | Demo Host 本地路徑的 demo 文件（§4.15.9；§8 Q11） |
+| — | `data/demo/lumen_sample.md`（新） | Demo Host 本地路徑的 demo 文件（§4.15.9；§8 Q11） |
 
 ### 4.3 公開 API
 
@@ -364,7 +364,7 @@ __all__ = [
 ]
 
 # src/showreceipts/adapters/__init__.py
-__all__ = ["from_arrkb", "from_langchain"]
+__all__ = ["from_rerank_response", "from_langchain"]
 
 # src/showreceipts/quality/__init__.py
 __all__ = ["build_quality_report", "QualityReport", "SentenceSupport", "EntityFlag",
@@ -380,7 +380,7 @@ __all__ = ["build_quality_report", "QualityReport", "SentenceSupport", "EntityFl
 | `Generator` | `Generator = Callable[[str, str], str]`（system_prompt, user_prompt → answer_text） | `generators.py` |
 | `OpenAICompatGenerator` | `__init__(self, *, base_url: str, model: str, api_key: str = "", temperature: float = 0.0, timeout: float = 600.0, max_retries: int = 2)`；`__call__(self, system_prompt: str, user_prompt: str) -> str` | `generators.py` |
 | `GeneratorError` | `class GeneratorError(RuntimeError)` | `generators.py` |
-| `from_arrkb` | `from_arrkb(data: Mapping[str, Any] \| Sequence[Mapping[str, Any]]) -> list[Passage]` | `adapters/arrkb.py` |
+| `from_rerank_response` | `from_rerank_response(data: Mapping[str, Any] \| Sequence[Mapping[str, Any]]) -> list[Passage]` | `adapters/rerank.py` |
 | `from_langchain` | `from_langchain(docs: Iterable[Any], *, id_key: str \| None = None, source_key: str = "source", locator_fn: Callable[[Mapping[str, Any]], str] \| None = None) -> list[Passage]` | `adapters/langchain_docs.py` |
 | `build_prompt`（非頂層） | `build_prompt(question: str, passages: Sequence[Passage], config: ShowReceiptsConfig \| None = None) -> tuple[str, str]` | `prompts.py` |
 | `build_quality_report`（非頂層） | `build_quality_report(answer: str, citations: list[Citation], passages: list[Passage]) -> QualityReport` | `quality/report.py` |
@@ -395,7 +395,7 @@ __all__ = ["build_quality_report", "QualityReport", "SentenceSupport", "EntityFl
 | Generator 自己拋例外 | 原樣往上拋，模組不吞、不重試 |
 | `postprocess` 的 `answer_text` 不是 `str` | `TypeError` |
 | `OpenAICompatGenerator` 連線 / 逾時 / HTTP / 回應格式錯誤 | 依 §4.12 重試後仍失敗 → `GeneratorError`（以 `raise ... from err` 保留原因） |
-| `from_arrkb` 輸入形狀或欄位錯誤 | 只拋 `ValueError`（含 Pydantic `ValidationError`）或 `TypeError`（§4.13.1） |
+| `from_rerank_response` 輸入形狀或欄位錯誤 | 只拋 `ValueError`（含 Pydantic `ValidationError`）或 `TypeError`（§4.13.1） |
 | `config` 欄位不合法 | 建立 `ShowReceiptsConfig` 時 Pydantic `ValidationError` |
 | `build_quality_report` 拋例外 | 不往上拋：`quality_report = None`、記 warning（§4.10，D12） |
 
@@ -736,7 +736,7 @@ def build_prompt(question, passages, config=None) -> tuple[str, str]:
 
 規則：
 - 預設值下 `system == src/prompts.py::SYSTEM_PROMPT`（Tier 1 字串），byte-identical（AC #11）
-- Locator 非空時，區塊與 Tier 1 `_BLOCK_TEMPLATE = "[{n}] 來源: {filename}（第 {page} 頁）\n{content}\n"` 同形；Demo Host 給 `locator="第 {page} 頁"`，因此本地與 arrkb 路徑的 user prompt 與 Tier 1 byte-identical（已以 `data/sample_reranked.json` 實測）
+- Locator 非空時，區塊與 Tier 1 `_BLOCK_TEMPLATE = "[{n}] 來源: {filename}（第 {page} 頁）\n{content}\n"` 同形；Demo Host 給 `locator="第 {page} 頁"`，因此本地與 rerank API 路徑的 user prompt 與 Tier 1 byte-identical（已以 `data/sample_reranked.json` 實測）
 - Locator 為空字串時省略括號（「[1] 來源: foo.md」）
 - user 模板與區塊模板都以單趟 regex 替換，不用 `str.format`：模板內的其他大括號（如 JSON 範例）不會出錯；Passage 內文或問題中出現字面的 `{question}`、`{n}` 也不會被二次替換
 - 覆寫的模板缺 placeholder 時不拋例外（D15 字面；§8 Q15）：`user_prompt_template` 缺 `{context_blocks}` 或 `{question}`、`passage_block_template` 缺 `{n}` 或 `{text}` 時，`build_prompt` 各記一次 `log.warning`。給空字串 `""` 也照字面使用（不回退到預設模板）
@@ -883,17 +883,17 @@ def find_uncited_sentences(sentences: list[str]) -> list[UncitedSentence]:
 
 #### 4.11.4 Worked example（golden：`cited_answer_example.json` / `quality_report_uncited_example.json`）
 
-Passage 為 `[Passage.model_validate(p) for p in cited_answer_example.json["passages"]]`（等同 `from_arrkb(sample)[:4]`，該等式由 `test_arrkb_*` 另行驗證，因此本例在 §7 步驟 4 不需要 Adapter），假 Generator 回：
+Passage 為 `[Passage.model_validate(p) for p in cited_answer_example.json["passages"]]`（等同 `from_rerank_response(sample)[:4]`，該等式由 `test_rerank_*` 另行驗證，因此本例在 §7 步驟 4 不需要 Adapter），假 Generator 回：
 
 ```text
-切換【Pay 著刷】方案並以臺新 Pay 支付，最高可享 3.8% 臺新 Point 回饋 [1、3]。繳保費免切換即享 1.3% 回饋，切換「假日刷」最高可享 2% [4][2]。一般消費回饋為 0.3% [9]。
+切換【Pay 著刷】方案並以範例 Pay 支付，最高可享 3.8% 範例 Point 回饋 [1、3]。繳保費免切換即享 1.3% 回饋，切換「假日刷」最高可享 2% [4][2]。一般消費回饋為 0.3% [9]。
 ```
 
 結果：
 
 | 項目 | 值 |
 |---|---|
-| `answer` | `切換【Pay 著刷】方案並以臺新 Pay 支付，最高可享 3.8% 臺新 Point 回饋 [1][2]。繳保費免切換即享 1.3% 回饋，切換「假日刷」最高可享 2% [3][4]。一般消費回饋為 0.3% 。` |
+| `answer` | `切換【Pay 著刷】方案並以範例 Pay 支付，最高可享 3.8% 範例 Point 回饋 [1][2]。繳保費免切換即享 1.3% 回饋，切換「假日刷」最高可享 2% [3][4]。一般消費回饋為 0.3% 。` |
 | `citations` | n1=`…054657`、n2=`…054730`、n3=`…054734`、n4=`…054735` |
 | `fabricated_markers` | `["[9]"]` |
 | `sentence_supports` | 句 0 supported（0.5366，`…054657`）；句 1 supported（0.6129，`…054735`）；句 2 unsupported（0.0） |
@@ -922,12 +922,12 @@ urllib 會讀 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（大小寫皆可）；
 
 ### 4.13 Adapters
 
-#### 4.13.1 arrkb：`from_arrkb(data)`
+#### 4.13.1 rerank API：`from_rerank_response(data)`
 
 | 項目 | 規格 |
 |---|---|
 | 輸入 | `{"data": [...]}`（`data/sample_reranked.json` 的外層）或 item list；兩者結果相同 |
-| 必要欄位 | `context_id`、`content`；缺任一 → `ValueError(f"arrkb item {i}: missing '{key}'")` |
+| 必要欄位 | `context_id`、`content`；缺任一 → `ValueError(f"rerank API item {i}: missing '{key}'")` |
 | `id` | `str(item["context_id"])` |
 | `text` | `item["content"]` |
 | `source` | `item.get("filename")` 非空則用之，否則 `"?"`（沿用現行 `RerankedChunk.filename` 預設） |
@@ -936,7 +936,7 @@ urllib 會讀 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY`（大小寫皆可）；
 | `metadata` | item 中 `context_id` / `content` / `filename` 以外的全部 key（含 `type`、`kb_name`、`file_id`、`page`、`kwargs` 與 production 多帶的欄位），淺拷貝 |
 | 順序 | 原樣保留（D22） |
 
-arrkb 是外部 schema：Adapter 不對 item 套 `extra="forbid"`，多帶欄位進 `metadata`。golden：`contracts/fixtures/passage_arrkb_example.json` = `from_arrkb(sample)[0]`。
+rerank API 是外部 schema：Adapter 不對 item 套 `extra="forbid"`，多帶欄位進 `metadata`。golden：`contracts/fixtures/passage_rerank_example.json` = `from_rerank_response(sample)[0]`。
 
 #### 4.13.2 LangChain：`from_langchain(docs, *, id_key="id", source_key="source", locator_fn=None)`
 
@@ -972,8 +972,8 @@ LangChain 的 0-based 頁碼原樣顯示（與 Demo Host 現行「第 {page} 頁
            return None
    sys.meta_path.insert(0, _Block())
    import src.showreceipts as sr
-   from src.showreceipts.adapters import from_arrkb, from_langchain
-   # 跑一次 answer()（假 Generator）、postprocess()、from_arrkb(sample)、from_langchain(SimpleNamespace docs)
+   from src.showreceipts.adapters import from_rerank_response, from_langchain
+   # 跑一次 answer()（假 Generator）、postprocess()、from_rerank_response(sample)、from_langchain(SimpleNamespace docs)
    assert not {m.split(".")[0] for m in sys.modules} & BLOCKED
    assert {m for m in sys.modules if m.startswith("src.") and not m.startswith("src.showreceipts")} <= {"src.logging_setup"}
    ```
@@ -1011,13 +1011,13 @@ def query(
     generator: Generator | None = None,
 ) -> CitedAnswer:
     if reranked is None:                                      # 本地知識庫
-        passages = from_arrkb([r.model_dump() for r in retrieve(question)])
+        passages = from_rerank_response([r.model_dump() for r in retrieve(question)])
         config = ShowReceiptsConfig(no_answer_reply=EMPTY_KB_REPLY)
     else:                                                     # 外部檢索結果
         items = reranked if isinstance(reranked, Mapping) else [
             r.model_dump() if isinstance(r, RerankedChunk) else r for r in reranked
         ]
-        passages = from_arrkb(items)
+        passages = from_rerank_response(items)
         config = ShowReceiptsConfig()
     return answer(question, passages, generator or get_generator(), config=config)
 ```
@@ -1089,9 +1089,9 @@ def live_lookup_ids(items: list[tuple[Citation | StoredCitation, OriginKind]]) -
 #### 4.15.6 `app.py`
 
 - import 改為 `src.showreceipts`（`CitedAnswer`、`QualityReport`）、`src.rag_chain.query`、`src.citation_view`、`src.history`；拿掉 `src.eval`、`src.retrieval.RetrievedChunk`
-- 問答分頁頂端加 `st.radio("檢索來源", ["本地知識庫", "外部檢索結果（貼上 arrkb JSON）"], horizontal=True)`
+- 問答分頁頂端加 `st.radio("檢索來源", ["本地知識庫", "外部檢索結果（貼上 rerank API JSON）"], horizontal=True)`
   - 外部模式顯示 `st.text_area`，預設值為啟動時讀入的 `data/sample_reranked.json` 全文
-  - 送出問題時先 `json.loads` + `from_arrkb`；`json.JSONDecodeError` / `ValueError` / `TypeError` → `st.error("arrkb JSON 無法解析：…")`，不寫入任何歷史訊息、不呼叫 Generator
+  - 送出問題時先 `json.loads` + `from_rerank_response`；`json.JSONDecodeError` / `ValueError` / `TypeError` → `st.error("rerank API JSON 無法解析：…")`，不寫入任何歷史訊息、不呼叫 Generator
   - 合法時呼叫 `query(q, reranked=parsed)`
 - `render_citations` 改用 `citation_view`；每筆標頭如下，`locator` 為空、`chunk_index` 或 `score` 為 `None` 的片段省略，stale 標籤文字不變：
 
@@ -1197,7 +1197,7 @@ def main() -> None:
 | `test_prompts_user_template_missing_placeholder_rejected` | 缺 `{context_blocks}` → `ValidationError` |
 | `test_config_frozen_rejects_mutation_and_unknown_fields` | 指派欄位、未知欄位、`input_marker_base=2` 都 `ValidationError` |
 | `test_prompts_empty_locator_omits_parenthetical` | `locator=""` → `[1] 來源: foo.md` |
-| `test_prompts_arrkb_sample_user_prompt_byte_identical_to_tier1` | `from_arrkb(sample)` 組出的 user prompt 等於 Tier 1 snapshot |
+| `test_prompts_rerank_sample_user_prompt_byte_identical_to_tier1` | `from_rerank_response(sample)` 組出的 user prompt 等於 Tier 1 snapshot |
 
 ### 5.4 `tests/unit/showreceipts/test_quality.py`
 
@@ -1214,17 +1214,17 @@ def main() -> None:
 | `test_quality_reproduces_golden_uncited_report` | 等於 `quality_report_uncited_example.json` |
 | `test_quality_never_modifies_answer` | 呼叫前後答案字串相同 |
 
-### 5.5 `tests/unit/showreceipts/test_adapters_arrkb.py`
+### 5.5 `tests/unit/showreceipts/test_adapters_rerank.py`
 
 | Test | 驗證 |
 |---|---|
-| `test_arrkb_sample_first_item_matches_golden_passage` | `from_arrkb(sample)[0]` 等於 `passage_arrkb_example.json` |
-| `test_arrkb_envelope_and_bare_list_equivalent` | `{"data": [...]}` 與 list 結果相同 |
-| `test_arrkb_extra_fields_kept_in_metadata` | 多帶欄位出現在 `metadata` |
-| `test_arrkb_missing_context_id_raises_value_error` | 訊息含 item index |
-| `test_arrkb_empty_page_gives_empty_locator` | `page=""` / 缺 → `locator == ""`；`page=0` → `第 0 頁` |
-| `test_arrkb_missing_kwargs_gives_none_score` | 無 `kwargs` → `score is None` |
-| `test_arrkb_order_preserved_not_sorted_by_score` | 分數遞增的輸入順序不變 |
+| `test_rerank_sample_first_item_matches_golden_passage` | `from_rerank_response(sample)[0]` 等於 `passage_rerank_example.json` |
+| `test_rerank_envelope_and_bare_list_equivalent` | `{"data": [...]}` 與 list 結果相同 |
+| `test_rerank_extra_fields_kept_in_metadata` | 多帶欄位出現在 `metadata` |
+| `test_rerank_missing_context_id_raises_value_error` | 訊息含 item index |
+| `test_rerank_empty_page_gives_empty_locator` | `page=""` / 缺 → `locator == ""`；`page=0` → `第 0 頁` |
+| `test_rerank_missing_kwargs_gives_none_score` | 無 `kwargs` → `score is None` |
+| `test_rerank_order_preserved_not_sorted_by_score` | 分數遞增的輸入順序不變 |
 
 ### 5.6 `tests/unit/showreceipts/test_adapters_langchain.py`
 
@@ -1282,17 +1282,17 @@ def main() -> None:
 
 ## 6. Acceptance Criteria
 
-1. **Passage 契約與 arrkb golden**：`Passage.model_validate(passage_arrkb_example.json)` 不 raise；`from_arrkb(json.load(open("data/sample_reranked.json")))[0].model_dump() == passage_arrkb_example.json`（`test_arrkb_sample_first_item_matches_golden_passage`、`test_contract_fixture`）。
+1. **Passage 契約與 rerank API golden**：`Passage.model_validate(passage_rerank_example.json)` 不 raise；`from_rerank_response(json.load(open("data/sample_reranked.json")))[0].model_dump() == passage_rerank_example.json`（`test_rerank_sample_first_item_matches_golden_passage`、`test_contract_fixture`）。
 2. **恰好兩個入口**：`src.showreceipts.__all__` 與 §4.3 清單完全相同，其中可呼叫且回傳 `CitedAnswer` 的只有 `answer`、`postprocess`（`test_isolation_public_api_all_matches_spec`）。
 3. **Tier 1 重編號保留**：`postprocess("句A [2]. 句B [4][2][99].", 5 段 Passage)` 的 `answer == "句A [1]. 句B [2][1]."`、`[c.n for c in citations] == [1, 2]`（`test_markers_tier1_docstring_example_renumbers_and_drops_fabricated`）。
 4. **Marker 正規化**：§4.8.4 例 1–18 全部逐列相符，含 `[1-3]`、`[1, 2]`、`[2，1]`、`[1、3]`、`[0]`（1-based 與 0-based）（`test_markers_worked_examples_match_table`）。
 5. **Fabricated Marker 移除並記錄**：被移除的群組不出現在 `answer`，並以原字串、首次出現順序、去重記入 `fabricated_markers`（`test_markers_worked_examples_match_table`、`test_markers_fabricated_group_recorded_once_in_order`）。
 6. **連續空白壓縮**：§4.8.4 例 13 結果為 `甲 乙 丙 [1]。`；無 marker 的「甲  乙」亦壓成「甲 乙」（`test_markers_double_space_compressed_globally`）。
-7. **不依 score 重排**：score 遞增的 3 段 Passage，prompt 中 `[1]`/`[2]`/`[3]` 依給定順序對應（`test_answer_passages_numbered_in_given_order_not_by_score`、`test_arrkb_order_preserved_not_sorted_by_score`）。
+7. **不依 score 重排**：score 遞增的 3 段 Passage，prompt 中 `[1]`/`[2]`/`[3]` 依給定順序對應（`test_answer_passages_numbered_in_given_order_not_by_score`、`test_rerank_order_preserved_not_sorted_by_score`）。
 8. **重複 Passage ID 取第一個**：§4.8.4 例 19、20 相符，`passages` 只含 [A, B]，Citation 內文為第一個 A（`test_answer_duplicate_passage_ids_keep_first`、`test_postprocess_duplicate_ids_positional_slots_resolve_to_first`）。
 9. **0-based 選項**：`input_marker_base=0` 時 §4.8.4 例 11、12 相符；`answer()` 不受影響（`test_postprocess_zero_based_answer_normalized`、`test_answer_ignores_input_marker_base_zero`）。
 10. **No-Answer Reply**：零 Passage 時 Generator 呼叫次數為 0，結果等於 `cited_answer_no_answer_example.json`；`no_answer_reply` 可覆寫；Demo Host 本地空知識庫回 `"依現有資料無法回答：知識庫目前是空的，請先在「文件管理」分頁上傳文件。"`（`test_answer_zero_passages_skips_generator_returns_no_answer_reply`、`test_answer_custom_no_answer_reply_used`、`test_demo_local_path_empty_kb_returns_upload_hint`）。
-11. **預設 prompt byte-identical**：預設 system prompt 等於 Tier 1 `SYSTEM_PROMPT`；`from_arrkb(sample)` 組出的 user prompt 等於 Tier 1 `build_user_message` 對同一份資料的輸出（snapshot 字串寫死在測試內）（`test_prompts_default_system_prompt_equals_tier1_snapshot`、`test_prompts_arrkb_sample_user_prompt_byte_identical_to_tier1`、`test_answer_generator_receives_default_prompts_byte_identical`）。
+11. **預設 prompt byte-identical**：預設 system prompt 等於 Tier 1 `SYSTEM_PROMPT`；`from_rerank_response(sample)` 組出的 user prompt 等於 Tier 1 `build_user_message` 對同一份資料的輸出（snapshot 字串寫死在測試內）（`test_prompts_default_system_prompt_equals_tier1_snapshot`、`test_prompts_rerank_sample_user_prompt_byte_identical_to_tier1`、`test_answer_generator_receives_default_prompts_byte_identical`）。
 12. **Prompt 覆寫與語言**：`language` 只改第 5 條；`system_prompt` 原樣使用；`user_prompt_template` 單趟替換（`test_prompts_language_substitutes_rule_five_only`、`test_prompts_system_override_used_verbatim`、`test_prompts_user_template_override_single_pass_substitution`）。
 13. **Quality Report 預設開啟、可關閉**：預設 `quality_report is not None`；`enable_quality_report=False` → `None`（`test_answer_quality_report_on_by_default`、`test_answer_quality_report_disabled_returns_none`）。
 14. **Quality Report 只報不攔**：開關 Quality Report 時 `answer` 與 `citations` 完全相同；Quality Report 任何結果都不使入口拋例外（`test_answer_text_identical_with_and_without_quality_report`、`test_quality_never_modifies_answer`）。
@@ -1308,7 +1308,7 @@ def main() -> None:
 24. **History v2**：外部引用經 `add_message` → `load_conversation` 後 `origin == "external"`、`source` / `locator` 保留；含舊欄位 `context_id` 的資料 `ValidationError`（`test_history_external_citation_roundtrip_keeps_origin_source_locator`、`test_history_v1_context_id_field_rejected`）。
 25. **LangChain 範例**：`examples/langchain_postprocess.run()` 搭配 `FakeListChatModel` 回 0-based 答案，經 `postprocess` 正規化為 1-based、移除 `[7]`（`test_demo_langchain_example_fake_llm_zero_based_postprocess`）。
 26. **全套測試綠**：`pytest -m "not requires_ollama" -q` 退出碼 0；`bash scripts/regression.sh` 退出碼 0。
-27. **Demo UAT（D28，手動）**：Streamlit 中依序完成——(a) 本地知識庫模式問「臺新 Richart 卡鈦金商務卡年費多少？」得到帶 `[n]` 的答案（前提見 §8 Q11）；(b) 外部檢索結果模式以預填的 sample JSON 問「切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？」「繳保費可以拿到多少回饋？切換假日刷呢？」，Citation 顯示快照且無 stale 標籤、重新整理頁面後仍無；(c) 終端執行 `python examples/langchain_postprocess.py "一般消費回饋是多少？有上限嗎？"` 印出 raw 與正規化後答案；README 有三條路徑的操作說明。
+27. **Demo UAT（D28，手動）**：Streamlit 中依序完成——(a) 本地知識庫模式問「範例銀行 Lumen 卡鈦金商務卡年費多少？」得到帶 `[n]` 的答案（前提見 §8 Q11）；(b) 外部檢索結果模式以預填的 sample JSON 問「切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？」「繳保費可以拿到多少回饋？切換假日刷呢？」，Citation 顯示快照且無 stale 標籤、重新整理頁面後仍無；(c) 終端執行 `python examples/langchain_postprocess.py "一般消費回饋是多少？有上限嗎？"` 印出 raw 與正規化後答案；README 有三條路徑的操作說明。
 28. **Spec 100 contracts 標記 superseded**：`specs/100-migration-foundation/contracts/chunk_schema.py` 檔頭含 `Superseded by: specs/106-showreceipts`（`grep -q` 成功），且 `test_contract_fixture` 仍綠。
 
 ---
@@ -1321,7 +1321,7 @@ def main() -> None:
 2. **Marker 正規化**：新增 `markers.py` 與 `test_markers.py`。`src/citation.py` 仍在、仍被 `rag_chain` 使用。
 3. **Quality Report**：新增 `quality/{sentences,support,entities,uncited,report}.py`（從 `src/eval/` 複製後改名）與 `test_quality.py`。`src/eval/` 仍在、仍被 `app.py` 使用。
 4. **Prompt、Generator、入口**：新增 `prompts.py`、`generators.py`、`pipeline.py`；`__init__.py` 補齊 `__all__`；加 `test_prompts.py`、`test_pipeline.py`、`test_generators.py`、`test_isolation_import_with_blocked_frameworks_succeeds`、`test_isolation_public_api_all_matches_spec`（此時兩者中涉及 Adapter 的部分先跳過，步驟 5 打開）。
-5. **Adapters**：新增 `adapters/arrkb.py`、`adapters/langchain_docs.py` 與兩份測試；打開步驟 4 跳過的 Adapter 斷言（`adapters.__all__`、封鎖 import 時執行 `from_arrkb` / `from_langchain`）。
+5. **Adapters**：新增 `adapters/rerank.py`、`adapters/langchain_docs.py` 與兩份測試；打開步驟 4 跳過的 Adapter 斷言（`adapters.__all__`、封鎖 import 時執行 `from_rerank_response` / `from_langchain`）。
 6. **Demo Host 切換**（同一個 commit 內完成，避免中途壞掉）：
    1. Lead 手動刪除 `data/history.sqlite`（D27）
    2. 改 `src/llm.py`、`src/rag_chain.py`、`src/retrieval.py`、`src/utils.py`、`rag.py`
@@ -1365,7 +1365,7 @@ def main() -> None:
 | Q8 | LangChain 文件沒有 id | `ValueError`，請呼叫端指定 `id_key` | 以 `page_content` 的雜湊產生穩定 ID |
 | Q9 | D18 只點名 Spec 100；Spec 103 `history_schema.py`、Spec 104 `quality_report_schema.py` 也會失去 runtime 對應 | v2 history 契約放在本 spec `contracts/demo_host_history_schema.py`；103 / 104 是否加 superseded 註記待裁決 | 直接修改 Spec 103 contract 檔；或 103 / 104 不標記 |
 | Q10 | 外部引用重載後不加 stale 標籤需要記住來源 | `StoredCitation` 每筆加 `origin`（`local` / `external`），並存 `source` / `locator` | 在 `Message` 層記一個 retrieval mode |
-| Q11 | D28 本地路徑要問 Richart 問題，但 `data/docs/*` 被 `.gitignore` 排除，repo 內沒有可入庫的 Richart 文件 | 未決；AC #27(a) 以「Lead 事先上傳一份 Richart 文件」為前提 | 由 `data/sample_reranked.json` 產生 `data/demo/richart_sample.md` 並 commit，UAT 先入庫此檔 |
+| Q11 | D28 本地路徑要問 Lumen 問題，但 `data/docs/*` 被 `.gitignore` 排除，repo 內沒有可入庫的 Lumen 文件 | 未決；AC #27(a) 以「Lead 事先上傳一份 Lumen 文件」為前提 | 由 `data/sample_reranked.json` 產生 `data/demo/lumen_sample.md` 並 commit，UAT 先入庫此檔 |
 | Q12 | 頁碼顯示 | 維持「第 {page} 頁」原值（本地 PDF 為 0-based、非 PDF 顯示「第 0 頁」），以保持 prompt byte-identical | 本地 PDF 改 1-based、非 PDF 留空 Locator（會改變 prompt） |
 | Q13 | D9「模組與專案同名」是否包含現在就把 `pyproject.toml` 的 `name = "tag-rag"`、README 標題改為 showreceipts | **已裁決（2026-10-19）**：專案已改名 showreceipts（`pyproject.toml`、README / CLAUDE.md 標題、UI 標題）；Chroma collection 名稱與測試 fixture 文字留待重寫處理 | — |
 | Q14 | `CitedAnswer` 除 GLOSSARY 所列（答案、Citation、Quality Report）外另有 `raw_answer`、`passages`、`fabricated_markers` | 保留（`passages` 對應現行 `retrieved`；另兩欄供 demo 展示與除錯） | 刪去 `raw_answer` / `fabricated_markers`，只在 log 中記錄 |

@@ -2,7 +2,7 @@
   "quality_score": 0.5,
   "sentence_supports": [
     {
-      "sentence": "台新銀行 2024 年信用卡發卡量 300 萬張 [1]。",
+      "sentence": "範例銀行 2024 年信用卡發卡量 300 萬張 [1]。",
       "supported": true,
       "best_match_context_id": "8db342d6-59b2-58a6-98f4-de6d992a73f3",
       "overlap_score": 0.38

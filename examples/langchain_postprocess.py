@@ -1,6 +1,6 @@
 """LangChain 範例：LangChain 產生的 0-based 答案交給 showreceipts 後處理。
 
-LangChain 的 QA 範例常以 `[0]`、`[1]` 從 0 開始替資料編號。這裡把 arrkb 樣本轉成 LangChain Document
+LangChain 的 QA 範例常以 `[0]`、`[1]` 從 0 開始替資料編號。這裡把 rerank API 樣本轉成 LangChain Document
 （模擬 retriever 的輸出），用 LangChain 的鏈產生答案，再以 `from_langchain` 把同一批文件轉成 Passage，
 經 `postprocess(..., input_marker_base=0)` 轉成從 1 連號的 `[n]`，並刪掉對不到任何文件的編號。
 showreceipts 本身不需要安裝 LangChain。
@@ -65,7 +65,7 @@ def run(question: str, llm: Runnable[Any, Any], docs: list[Document]) -> CitedAn
 def main(argv: list[str] | None = None, *, llm: Runnable[Any, Any] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("question")
-    parser.add_argument("--sample", type=Path, default=SAMPLE_PATH, help="arrkb 樣本 JSON")
+    parser.add_argument("--sample", type=Path, default=SAMPLE_PATH, help="rerank API 樣本 JSON")
     args = parser.parse_args(argv)
 
     try:

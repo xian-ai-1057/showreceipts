@@ -374,7 +374,7 @@ cited_chunks = [chunk_by_n[n] for n in cite_ns if n in chunk_by_n]
 ## 8. Acceptance Criteria
 
 1. **句級 supported 判定（正例）**：給 fixture 句子 `"統一企業 1967 年成立 [1]。"` + retrieved 含 `RetrievedChunk(n=1, text="統一企業在 1967 年於台南創立，創辦人為高清愿。", chunk_id="abc:0", ...)`，呼叫 `evaluate(answer, retrieved)` 必回 `quality_score == 1.0`、`sentence_supports[0].supported == True`、`sentence_supports[0].best_match_chunk_id == "abc:0"`、`unsupported_entities == []`。
-2. **實體 hallucination 偵測（反例）**：答案 `"台新銀行 2024 年信用卡發卡量 300 萬張 [1]。同年營收達 100 億元 [1]。"`，cited chunk 內含 `"300 萬張"` 但不含 `"100 億"`，呼叫 `evaluate` 必回 `unsupported_entities` 含 `EntityFlag(entity="100 億", kind=EntityKind.NUM, ...)`。
+2. **實體 hallucination 偵測（反例）**：答案 `"範例銀行 2024 年信用卡發卡量 300 萬張 [1]。同年營收達 100 億元 [1]。"`，cited chunk 內含 `"300 萬張"` 但不含 `"100 億"`，呼叫 `evaluate` 必回 `unsupported_entities` 含 `EntityFlag(entity="100 億", kind=EntityKind.NUM, ...)`。
 3. **quality_score 為 supported 句比例**：建構 fixture：4 句答案，前 2 句 supported、後 2 句 unsupported（透過控制 overlap），`evaluate` 回 `quality_score == 0.5`。
 4. **Deterministic**：對同一 input 連跑 5 次 `evaluate`，每次回的 `QualityReport.model_dump()` 必完全相等（含浮點數）。
 5. **效能上限**：用 5 個 chunks（每 500 字）+ 答案 300 字（含 4 句）連跑 100 次 `evaluate`，總時間 < 50 秒（平均 < 500ms / call）。

@@ -152,15 +152,15 @@ else:
     raise SystemExit("blocker did not block langchain_core")
 
 import showreceipts as sr
-from showreceipts.adapters import from_arrkb, from_langchain
+from showreceipts.adapters import from_rerank_response, from_langchain
 
-arrkb = from_arrkb(json.load(open(sys.argv[1], encoding="utf-8")))
+reranked = from_rerank_response(json.load(open(sys.argv[1], encoding="utf-8")))
 langchain = from_langchain([SimpleNamespace(page_content="年費 NT$4,500", metadata={"source": "card.pdf"})])
-answered = sr.answer("年費多少？", arrkb, lambda system, user: "年費 NT$4,500 [2]。")
+answered = sr.answer("年費多少？", reranked, lambda system, user: "年費 NT$4,500 [2]。")
 processed = sr.postprocess("年費 NT$4,500 [1]。", langchain)
 loaded = {m.split(".")[0] for m in sys.modules} & BLOCKED
 print(json.dumps({
-    "arrkb": len(arrkb),
+    "reranked": len(reranked),
     "answer": [answered.answer, answered.citations[0].passage.id],
     "postprocess": [processed.answer, processed.citations[0].passage.id == langchain[0].id],
     "loaded": sorted(loaded),
@@ -177,8 +177,8 @@ def test_isolation_frameworks_blocked_core_and_adapters_still_run() -> None:
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {
-        "arrkb": 6,
-        "answer": ["年費 NT$4,500 [1]。", "465150318778054735"],
+        "reranked": 6,
+        "answer": ["年費 NT$4,500 [1]。", "100000000000000005"],
         "postprocess": ["年費 NT$4,500 [1]。", True],
         "loaded": [],
     }

@@ -41,7 +41,7 @@ class MessageRole(StrEnum):
 class OriginKind(StrEnum):
     """引用的 Passage 從哪條 Demo Host 路徑來。"""
     LOCAL = "local"        # 本地 Chroma 檢索；渲染時反查最新原文，查無加 stale 標籤
-    EXTERNAL = "external"  # 貼上的 arrkb JSON；渲染時只顯示快照，不加 stale 標籤
+    EXTERNAL = "external"  # 貼上的 rerank API JSON；渲染時只顯示快照，不加 stale 標籤
 
 
 class StoredCitation(BaseModel):

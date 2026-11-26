@@ -23,7 +23,7 @@ Passage 在 Source 內的位置描述，例如頁碼、工作表或章節；可�
 _Avoid_: page, chunk_index, offset
 
 **Adapter**：
-把某個檢索系統（例如 arrkb、LangChain）的結果轉成 Passage 的轉換器；引用層對外部檢索系統的所有認識都只存在於 Adapter。
+把某個檢索系統（例如 rerank API、LangChain）的結果轉成 Passage 的轉換器；引用層對外部檢索系統的所有認識都只存在於 Adapter。
 _Avoid_: connector, loader, plugin
 
 **Document**：

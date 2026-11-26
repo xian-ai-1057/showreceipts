@@ -65,7 +65,7 @@ def test_examples_langchain_main_prints_raw_and_processed_answer(
     assert code == 0
     assert RAW in out
     assert "最高回饋 3.8% [1]，超商 LINE Pay 也有回饋 [2][3]，保費 10%。" in out
-    assert f"[3] 20260312【信用卡】115年上半年台新Richart卡權益 .docx.txt（第 1 頁） id={IDS[1]}" in out
+    assert f"[3] Lumen卡權益說明.docx.txt（第 1 頁） id={IDS[1]}" in out
     assert "刪除的 Fabricated Marker：[7]" in out
 
 

@@ -35,7 +35,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     doc["Document<br/>PDF、DOCX、Markdown、純文字"] --> splitter["Splitter<br/>split()"]
-    ext["外部檢索結果<br/>arrkb、LangChain…"] --> adapter["Adapter<br/>from_arrkb()、from_langchain()"]
+    ext["外部檢索結果<br/>rerank API、LangChain…"] --> adapter["Adapter<br/>from_rerank_response()、from_langchain()"]
     splitter --> plist["Passage 清單"]
     adapter --> plist
     plist --> selector["Selector<br/>select()：字元 bigram BM25"]
@@ -92,7 +92,7 @@ pip install -e ".[pdf,docx,demo]"             # 不用 uv 時
 
 ```bash
 cp .env.example .env              # 填值；.env 已被 gitignore
-uv run --env-file .env showreceipts answer -q "Richart 卡正卡年費多少？" data/richart.md
+uv run --env-file .env showreceipts answer -q "Lumen 卡正卡年費多少？" data/lumen.md
 ```
 
 呼叫預設採 temperature 0、不串流（non-streaming），逾時 600 秒。連線失敗、408、409、429 或 ≥500 時最多重試 2 次（間隔 0.5 秒、1 秒），失敗一律包成 `GeneratorError`。只接受預設 temperature 的模型（例如 OpenAI 的 `gpt-6-luna`，傳 0 會回 400）請設 `SHOWRECEIPTS_TEMPERATURE=default`；這時答案不保證每次相同。
@@ -126,15 +126,15 @@ uv run --env-file .env --all-extras uvicorn demo.app:create_app --factory
 
 這條路徑模擬「使用者在對話中上傳一份文件就問」，不需要任何檢索系統。流程是 split → select → answer。
 
-- **Demo**：選「上傳 Document」，挑一個 `.md`、`.txt`、`.pdf` 或 `.docx` 檔，或按「改用範例 richart.md」。「預覽切段」會列出每段的 Locator 與 Passage ID。
+- **Demo**：選「上傳 Document」，挑一個 `.md`、`.txt`、`.pdf` 或 `.docx` 檔，或按「改用範例 lumen.md」。「預覽切段」會列出每段的 Locator 與 Passage ID。
 - **CLI**：`showreceipts answer -q "問題" 文件路徑`，見〈[CLI](#cli)〉。
 - **Python**：
 
 ```python
 from showreceipts import OpenAICompatGenerator, answer, select, split
 
-question = "Richart 卡正卡年費多少？一般消費的回饋是多少？"
-passages = split("data/richart.md")            # 也可傳 (位元組, 檔名)，例如 split((data, "合約.pdf"))
+question = "Lumen 卡正卡年費多少？一般消費的回饋是多少？"
+passages = split("data/lumen.md")            # 也可傳 (位元組, 檔名)，例如 split((data, "合約.pdf"))
 selected = select(question, passages)          # 總字數超過 12,000 才挑段，回傳時保持原順序
 generator = OpenAICompatGenerator(base_url="http://localhost:11434/v1", model="qwen3.5:4b-mlx", api_key="ollama")
 
@@ -159,16 +159,16 @@ Passage ID 是 `sha256(文件位元組)` 的前 12 碼加上 `:段落序號`，�
 
 這條路徑模擬「Passage 由任何外部檢索系統提供」。流程是 select → answer。
 
-- **Demo**：選「貼上 Passage JSON」。輸入框已預填 `data/richart_passages.json`，那是舊 arrkb 樣本轉成的 6 段 Richart 資料。可以試問：「切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？」、「繳保費可以拿到多少回饋？切換假日刷呢？」
+- **Demo**：選「貼上 Passage JSON」。輸入框已預填 `data/lumen_passages.json`，那是一份 rerank API 範例回應轉成的 6 段 Lumen 卡資料。可以試問：「切換 Pay 著刷最高回饋多少？在超商用 LINE Pay 有回饋嗎？」、「繳保費可以拿到多少回饋？切換假日刷呢？」
 - **CLI**：`showreceipts answer -q "問題" --passages passages.json`。
 - **Python**：自己組 `Passage`，或用 Adapter 轉換外部系統的結果：
 
 ```python
 from showreceipts import Passage
-from showreceipts.adapters import from_arrkb, from_langchain
+from showreceipts.adapters import from_rerank_response, from_langchain
 
 passages = [Passage(id="doc-7#3", text="正卡每卡每年 NT$4,500。", source="權益手冊.pdf", locator="第 3 頁")]
-passages = from_arrkb(arrkb_response)          # {"data": [...]}、多筆 list 或單筆都可以
+passages = from_rerank_response(rerank_response)          # {"data": [...]}、多筆 list 或單筆都可以
 passages = from_langchain(docs)                # 任何有 page_content 與 metadata 的物件
 ```
 
@@ -199,7 +199,7 @@ uv run --env-file .env python examples/langchain_postprocess.py "切換 Pay 著�
 import json
 from showreceipts import Passage, ShowReceiptsConfig, postprocess
 
-passages = [Passage.model_validate(p) for p in json.load(open("data/richart_passages.json", encoding="utf-8"))]
+passages = [Passage.model_validate(p) for p in json.load(open("data/lumen_passages.json", encoding="utf-8"))]
 cited = postprocess("年費 NT$4,500 [1]。LINE Pay 在超商沒有回饋 [2, 9]。", passages)
 cited.answer               # '年費 NT$4,500 [1]。LINE Pay 在超商沒有回饋 [2]。'
 cited.fabricated_markers   # ['[2, 9]']：只有 6 段，9 對不到任何 Passage
@@ -215,15 +215,15 @@ console script 是 `showreceipts`，結果以 JSON 輸出到 stdout。失敗時�
 
 ```bash
 # split：Document → Passage JSON
-uv run showreceipts split data/richart.md --target-chars 500 --source "Richart 權益"
+uv run showreceipts split data/lumen.md --target-chars 500 --source "Lumen 權益"
 
 # answer：問題 + Document（先 split）或 Passage JSON → select → Generator → Cited Answer JSON
-uv run --env-file .env showreceipts answer -q "Richart 卡正卡年費多少？" data/richart.md
-uv run --env-file .env showreceipts answer -q "繳保費可以拿到多少回饋？" --passages data/richart_passages.json --budget 8000
+uv run --env-file .env showreceipts answer -q "Lumen 卡正卡年費多少？" data/lumen.md
+uv run --env-file .env showreceipts answer -q "繳保費可以拿到多少回饋？" --passages data/lumen_passages.json --budget 8000
 
 # postprocess：答案文字（--answer-file 或 stdin）+ Passage JSON → Cited Answer JSON
-echo '年費 NT$4,500 [1]。LINE Pay 在超商沒有回饋 [2, 9]。' | uv run showreceipts postprocess --passages data/richart_passages.json
-uv run showreceipts postprocess --passages data/richart_passages.json --answer-file answer.txt --input-marker-base 0
+echo '年費 NT$4,500 [1]。LINE Pay 在超商沒有回饋 [2, 9]。' | uv run showreceipts postprocess --passages data/lumen_passages.json
+uv run showreceipts postprocess --passages data/lumen_passages.json --answer-file answer.txt --input-marker-base 0
 ```
 
 | 子指令 | 主要參數 |

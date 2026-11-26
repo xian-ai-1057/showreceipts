@@ -1,6 +1,6 @@
-"""Adapters：把外部檢索系統的結果轉成 Passage，依給定順序排列。引用層對 arrkb、LangChain 的認識只在這裡。
+"""Adapters：把外部檢索系統的結果轉成 Passage，依給定順序排列。引用層對 rerank API、LangChain 的認識只在這裡。
 
-- `from_arrkb` 接受 `{"data": [...]}` 外層、多筆 list 或單筆結果。
+- `from_rerank_response` 接受 `{"data": [...]}` 外層、多筆 list 或單筆結果。
 - `from_langchain` 以 duck typing 讀取有 `page_content`（str）與 `metadata`（Mapping）的物件。Passage ID 取
   `metadata[id_key]`，沒有時用物件的 `.id`，兩者都沒有時以 Source 與內文的雜湊產生穩定 ID（整批只記一則
   warning）。預設 Locator 取 `metadata["page_label"]`，沒有時取 `metadata["page"]`；只給 0-based `page` 的
@@ -18,18 +18,18 @@ from .splitter import page_locator
 log = logging.getLogger(__name__)
 
 
-def from_arrkb(data: Any) -> list[Passage]:
+def from_rerank_response(data: Any) -> list[Passage]:
     if isinstance(data, Mapping):
         items = data["data"] if "data" in data and "context_id" not in data else [data]
     else:
         items = data
-    return [_arrkb_passage(i, item) for i, item in enumerate(items)]
+    return [_rerank_passage(i, item) for i, item in enumerate(items)]
 
 
-def _arrkb_passage(i: int, item: Mapping[str, Any]) -> Passage:
+def _rerank_passage(i: int, item: Mapping[str, Any]) -> Passage:
     for key in ("context_id", "content"):
         if key not in item:
-            raise ValueError(f"arrkb item {i}: missing '{key}'")
+            raise ValueError(f"rerank API item {i}: missing '{key}'")
     return Passage(
         id=str(item["context_id"]),
         text=item["content"],

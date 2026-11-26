@@ -1,4 +1,4 @@
-"""Demo HTTP 包裝層：每個端點的輸出與直接呼叫 Python API 完全相同；根路徑提供 demo 頁面與它預填的 Richart 樣本。"""
+"""Demo HTTP 包裝層：每個端點的輸出與直接呼叫 Python API 完全相同；根路徑提供 demo 頁面與它預填的 Lumen 樣本。"""
 
 import base64
 import io
@@ -20,9 +20,9 @@ PASSAGES = [
     Passage(id="A", text="second A", source="other.md"),
 ]
 ANSWER = "x [2] y [0] z [3] w [9]。"
-ARRKB_SAMPLE = Path(__file__).parents[1] / "data" / "sample_reranked.json"
+RERANK_SAMPLE = Path(__file__).parents[1] / "data" / "sample_reranked.json"
 TINY_MD = Path(__file__).parent / "fixtures" / "docs" / "tiny.md"
-RICHART_MD = Path(__file__).parents[1] / "data" / "richart.md"
+LUMEN_MD = Path(__file__).parents[1] / "data" / "lumen.md"
 DOCS = TINY_MD.parent
 
 
@@ -169,18 +169,18 @@ def test_demo_index_serves_single_html_page_that_calls_answer() -> None:
     assert 'fetch("/answer"' in page
 
 
-def test_demo_richart_sample_prefilled_by_page_answers_like_python_api(fake_generator) -> None:
+def test_demo_lumen_sample_prefilled_by_page_answers_like_python_api(fake_generator) -> None:
     client = TestClient(create_app(generator=fake_generator))
     fake_generator.reply = "年費 NT$4,500 [1]，回饋 [4][7]。"
 
-    assert '"/samples/richart_passages.json"' in client.get("/").text
-    sample = client.get("/samples/richart_passages.json")
+    assert '"/samples/lumen_passages.json"' in client.get("/").text
+    sample = client.get("/samples/lumen_passages.json")
     response = client.post("/answer", json={"question": "年費多少？", "passages": sample.json()})
 
     assert sample.status_code == 200
     passages = [Passage.model_validate(p) for p in sample.json()]
-    arrkb_records = json.loads(ARRKB_SAMPLE.read_text(encoding="utf-8"))["data"]
-    assert [p.id for p in passages] == [r["context_id"] for r in arrkb_records]
+    rerank_records = json.loads(RERANK_SAMPLE.read_text(encoding="utf-8"))["data"]
+    assert [p.id for p in passages] == [r["context_id"] for r in rerank_records]
     assert response.status_code == 200
     assert response.json() == answer("年費多少？", passages, fake_generator).model_dump(mode="json")
 
@@ -193,18 +193,18 @@ def test_demo_index_offers_upload_mode_for_every_document_format() -> None:
     assert "data_base64" in page
 
 
-def test_demo_richart_markdown_sample_uploaded_by_page_answers_like_python_api(fake_generator) -> None:
+def test_demo_lumen_markdown_sample_uploaded_by_page_answers_like_python_api(fake_generator) -> None:
     client = TestClient(create_app(generator=fake_generator))
     fake_generator.reply = "保費享 1.3% 回饋 [1]，切換假日刷最高 2% [2]。"
 
-    assert '"/samples/richart.md"' in client.get("/").text
-    sample = client.get("/samples/richart.md")
-    document = _document(sample.content, "richart.md")
+    assert '"/samples/lumen.md"' in client.get("/").text
+    sample = client.get("/samples/lumen.md")
+    document = _document(sample.content, "lumen.md")
     response = client.post("/answer", json={"question": "繳保費可以拿到多少回饋？", "document": document})
 
     assert sample.status_code == 200
-    assert sample.content == RICHART_MD.read_bytes()
-    passages = select("繳保費可以拿到多少回饋？", split(RICHART_MD))
+    assert sample.content == LUMEN_MD.read_bytes()
+    passages = select("繳保費可以拿到多少回饋？", split(LUMEN_MD))
     assert response.status_code == 200
     assert response.json() == answer("繳保費可以拿到多少回饋？", passages, fake_generator).model_dump(mode="json")
 
